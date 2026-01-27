@@ -10,6 +10,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
+import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 
 // --- markdown-it setup ---
 
@@ -36,6 +37,7 @@ md.use(markdownItAnchor);
 
 let currentFilePath = null;
 let currentBaseDir = null;
+let currentProjectRoot = null;
 
 // --- Rendering ---
 
@@ -75,6 +77,11 @@ async function openFile(filePath) {
     renderMarkdown(result.content);
     const fileName = currentFilePath.split("/").pop();
     await getCurrentWindow().setTitle(fileName + " \u2014 mdview");
+
+    // Enable the file-related menu items by notifying Rust
+    invoke("find_project_root", { filePath: currentFilePath }).then((root) => {
+      currentProjectRoot = root;
+    });
   } catch (err) {
     const contentEl = document.getElementById("content");
     contentEl.innerHTML = `<div id="welcome"><h1>Error</h1><p>${err}</p></div>`;
@@ -98,15 +105,15 @@ async function showOpenDialog() {
   }
 }
 
-// --- Font selection ---
+// --- Font selection (driven by menu bar) ---
 
-const fontSelect = document.getElementById("font-select");
 const fontClassMap = {
-  system: "font-system",
-  serif: "font-serif",
-  "sans-serif": "font-sans",
-  monospace: "font-mono",
-  readable: "font-readable",
+  font_system: "font-system",
+  font_inter: "font-inter",
+  font_serif: "font-serif",
+  font_sans: "font-sans",
+  font_mono: "font-mono",
+  font_readable: "font-readable",
 };
 
 function applyFont(key) {
@@ -114,16 +121,12 @@ function applyFont(key) {
   localStorage.setItem("mdview-font", key);
 }
 
-// Restore saved font
+// Restore saved font on load and sync menu checkmarks
 const savedFont = localStorage.getItem("mdview-font");
-if (savedFont) {
-  fontSelect.value = savedFont;
+if (savedFont && fontClassMap[savedFont]) {
   applyFont(savedFont);
+  invoke("sync_font_menu", { fontId: savedFont });
 }
-
-fontSelect.addEventListener("change", (e) => {
-  applyFont(e.target.value);
-});
 
 // --- Keyboard shortcuts ---
 
@@ -139,6 +142,55 @@ document.addEventListener("keydown", (e) => {
 // Listen for file-open events from the Rust backend (CLI args, file associations)
 listen("open-file", (event) => {
   openFile(event.payload);
+});
+
+// Listen for font changes from the menu bar
+listen("set-font", (event) => {
+  applyFont(event.payload);
+});
+
+// Listen for menu actions (copy paths, reveal)
+listen("menu-action", async (event) => {
+  const action = event.payload;
+  if (!currentFilePath) return;
+
+  switch (action) {
+    case "copy_file_path":
+      await writeText(currentFilePath);
+      break;
+    case "copy_dir_path":
+      if (currentBaseDir) {
+        await writeText(currentBaseDir);
+      }
+      break;
+    case "copy_project_path":
+      if (currentProjectRoot) {
+        await writeText(currentProjectRoot);
+      }
+      break;
+    case "reveal_finder":
+      await invoke("reveal_in_finder", { filePath: currentFilePath });
+      break;
+  }
+});
+
+// Listen for error messages from the backend
+listen("show-error", (event) => {
+  alert(event.payload);
+});
+
+// Listen for CLI install result
+listen("cli-install-result", (event) => {
+  const result = event.payload;
+  if (result === "ok") {
+    alert("Command line tool installed successfully.\n\nYou can now run:\n  mdview file.md");
+  } else if (result === "already-installed") {
+    alert("Command line tool is already installed.\n\nYou can run:\n  mdview file.md");
+  } else if (result === "cancelled") {
+    // User cancelled the admin prompt, do nothing
+  } else {
+    alert("Failed to install command line tool.\n\n" + result);
+  }
 });
 
 // Check if a file was passed via CLI on startup
