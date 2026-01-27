@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>mdview</title>
+  <link rel="stylesheet" href="./src/styles.css" />
+</head>
+<body>
+  <div id="toolbar">
+    <label for="font-select">Font:</label>
+    <select id="font-select">
+      <option value="system" selected>System Default</option>
+      <option value="serif">Serif</option>
+      <option value="sans-serif">Sans-serif</option>
+      <option value="monospace">Monospace</option>
+      <option value="readable">Readable</option>
+    </select>
+  </div>
+  <div id="content">
+    <div id="welcome">
+      <h1>mdview</h1>
+      <p>Open a Markdown file to get started.</p>
+      <p class="hint">Use <strong>File → Open</strong> (⌘O) or pass a file path on the command line.</p>
+    </div>
+  </div>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>

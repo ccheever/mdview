@@ -1,0 +1,285 @@
+/* === Reset & Base === */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --bg: #ffffff;
+  --fg: #1a1a1a;
+  --fg-muted: #656565;
+  --border: #e0e0e0;
+  --code-bg: #f5f5f5;
+  --code-border: #e0e0e0;
+  --blockquote-border: #d0d0d0;
+  --blockquote-fg: #555;
+  --link: #0969da;
+  --table-stripe: #f6f8fa;
+  --toolbar-bg: #f0f0f0;
+  --toolbar-border: #ddd;
+  --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-code: "SF Mono", SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1a1a1a;
+    --fg: #e0e0e0;
+    --fg-muted: #999;
+    --border: #333;
+    --code-bg: #2a2a2a;
+    --code-border: #444;
+    --blockquote-border: #555;
+    --blockquote-fg: #aaa;
+    --link: #58a6ff;
+    --table-stripe: #242424;
+    --toolbar-bg: #222;
+    --toolbar-border: #444;
+  }
+}
+
+html {
+  font-size: 16px;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* === Font Classes === */
+body.font-system    { --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+body.font-serif     { --font-body: Georgia, "Times New Roman", Times, serif; }
+body.font-sans      { --font-body: "Helvetica Neue", Helvetica, Arial, sans-serif; }
+body.font-mono      { --font-body: "SF Mono", SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+body.font-readable  { --font-body: Charter, "Bitstream Charter", "Sitka Text", Cambria, serif; }
+
+/* === Toolbar === */
+#toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: var(--toolbar-bg);
+  border-bottom: 1px solid var(--toolbar-border);
+  padding: 6px 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--fg-muted);
+  -webkit-app-region: drag;
+}
+
+#toolbar label {
+  user-select: none;
+}
+
+#toolbar select {
+  -webkit-app-region: no-drag;
+  font-size: 13px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--fg);
+  cursor: pointer;
+}
+
+/* === Content === */
+#content {
+  max-width: 750px;
+  margin: 0 auto;
+  padding: 32px 24px 64px;
+  font-family: var(--font-body);
+}
+
+/* === Welcome screen === */
+#welcome {
+  text-align: center;
+  padding-top: 120px;
+  color: var(--fg-muted);
+}
+
+#welcome h1 {
+  font-size: 2rem;
+  margin-bottom: 8px;
+  color: var(--fg);
+}
+
+#welcome .hint {
+  margin-top: 16px;
+  font-size: 0.9rem;
+}
+
+/* === Typography === */
+h1, h2, h3, h4, h5, h6 {
+  margin-top: 1.5em;
+  margin-bottom: 0.5em;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: 0.3em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: 0.3em; }
+h3 { font-size: 1.25em; }
+h4 { font-size: 1em; }
+h5 { font-size: 0.875em; }
+h6 { font-size: 0.85em; color: var(--fg-muted); }
+
+p {
+  margin-bottom: 1em;
+}
+
+a {
+  color: var(--link);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+strong { font-weight: 600; }
+
+/* === Lists === */
+ul, ol {
+  margin-bottom: 1em;
+  padding-left: 2em;
+}
+
+li {
+  margin-bottom: 0.25em;
+}
+
+li > ul, li > ol {
+  margin-bottom: 0;
+}
+
+/* === Task lists === */
+.task-list-item {
+  list-style: none;
+  margin-left: -1.5em;
+}
+
+.task-list-item input[type="checkbox"] {
+  margin-right: 0.5em;
+}
+
+/* === Blockquotes === */
+blockquote {
+  margin: 0 0 1em;
+  padding: 0.5em 1em;
+  border-left: 4px solid var(--blockquote-border);
+  color: var(--blockquote-fg);
+}
+
+blockquote > p:last-child {
+  margin-bottom: 0;
+}
+
+/* === Code === */
+code {
+  font-family: var(--font-code);
+  font-size: 0.9em;
+  background: var(--code-bg);
+  padding: 0.2em 0.4em;
+  border-radius: 3px;
+}
+
+pre {
+  margin-bottom: 1em;
+  padding: 16px;
+  overflow-x: auto;
+  background: var(--code-bg);
+  border: 1px solid var(--code-border);
+  border-radius: 6px;
+  line-height: 1.45;
+}
+
+pre code {
+  background: none;
+  padding: 0;
+  font-size: 0.85em;
+}
+
+/* === Tables === */
+table {
+  width: 100%;
+  margin-bottom: 1em;
+  border-collapse: collapse;
+  font-size: 0.95em;
+}
+
+th, td {
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  text-align: left;
+}
+
+th {
+  font-weight: 600;
+  background: var(--code-bg);
+}
+
+tr:nth-child(even) {
+  background: var(--table-stripe);
+}
+
+/* === Horizontal Rules === */
+hr {
+  margin: 2em 0;
+  border: none;
+  border-top: 1px solid var(--border);
+}
+
+/* === Images === */
+img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+}
+
+/* === Footnotes === */
+.footnotes {
+  margin-top: 2em;
+  padding-top: 1em;
+  border-top: 1px solid var(--border);
+  font-size: 0.9em;
+  color: var(--fg-muted);
+}
+
+/* === highlight.js light theme (GitHub-style) === */
+.hljs {
+  color: var(--fg);
+  background: var(--code-bg);
+}
+
+.hljs-comment, .hljs-quote { color: #6a737d; font-style: italic; }
+.hljs-keyword, .hljs-selector-tag { color: #d73a49; }
+.hljs-string, .hljs-addition { color: #032f62; }
+.hljs-number, .hljs-literal { color: #005cc5; }
+.hljs-built_in, .hljs-type { color: #6f42c1; }
+.hljs-title, .hljs-section { color: #6f42c1; font-weight: 600; }
+.hljs-name, .hljs-selector-id, .hljs-selector-class { color: #22863a; }
+.hljs-attr, .hljs-attribute { color: #005cc5; }
+.hljs-deletion { color: #b31d28; background: #ffeef0; }
+.hljs-addition { background: #f0fff4; }
+.hljs-meta { color: #735c0f; }
+
+@media (prefers-color-scheme: dark) {
+  .hljs-comment, .hljs-quote { color: #8b949e; }
+  .hljs-keyword, .hljs-selector-tag { color: #ff7b72; }
+  .hljs-string, .hljs-addition { color: #a5d6ff; }
+  .hljs-number, .hljs-literal { color: #79c0ff; }
+  .hljs-built_in, .hljs-type { color: #d2a8ff; }
+  .hljs-title, .hljs-section { color: #d2a8ff; font-weight: 600; }
+  .hljs-name, .hljs-selector-id, .hljs-selector-class { color: #7ee787; }
+  .hljs-attr, .hljs-attribute { color: #79c0ff; }
+  .hljs-deletion { color: #ffdcd7; background: #67060c; }
+  .hljs-addition { color: #aff5b4; background: #033a16; }
+  .hljs-meta { color: #d29922; }
+}
