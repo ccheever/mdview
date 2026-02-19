@@ -6,7 +6,7 @@ import {
 } from "electrobun/bun";
 import Electrobun from "electrobun/bun";
 import { existsSync, readFileSync, realpathSync, statSync, symlinkSync, unlinkSync, readlinkSync } from "fs";
-import { resolve, dirname, basename, join } from "path";
+import { resolve, dirname, basename, join, extname } from "path";
 import type { MdviewRPC } from "../shared/rpc-types";
 
 // --- Constants ---
@@ -162,6 +162,60 @@ function readFile(path: string): { content: string; path: string; dir: string } 
   return { content, path: canonical, dir };
 }
 
+function resolveExistingFile(pathArg: string): string | null {
+  let candidate = pathArg;
+
+  if (candidate.startsWith("file://")) {
+    try {
+      candidate = decodeURIComponent(new URL(candidate).pathname);
+    } catch {
+      return null;
+    }
+  } else if (candidate.startsWith("~/")) {
+    candidate = join(process.env.HOME || "", candidate.slice(2));
+  }
+
+  const resolved = resolve(candidate);
+
+  try {
+    const stat = statSync(resolved);
+    if (!stat.isFile()) return null;
+    return resolved;
+  } catch {
+    return null;
+  }
+}
+
+function getInitialFileFromArgs(): string | null {
+  const args = process.argv;
+  let hadDashDash = false;
+  let firstReadableMatch: string | null = null;
+
+  for (let i = 1; i < args.length; i++) {
+    const arg = args[i];
+    if (!hadDashDash && arg === "--") {
+      hadDashDash = true;
+      continue;
+    }
+    if (!hadDashDash && arg.startsWith("-")) {
+      continue;
+    }
+
+    const resolved = resolveExistingFile(arg);
+    if (!resolved) continue;
+
+    const extension = extname(resolved).toLowerCase();
+    if (SUPPORTED_MARKDOWN_EXTENSIONS.includes(extension)) {
+      return resolved;
+    }
+    if (!firstReadableMatch) {
+      firstReadableMatch = resolved;
+    }
+  }
+
+  return firstReadableMatch;
+}
+
 // --- Build menu ---
 
 function buildMenu() {
@@ -302,22 +356,7 @@ const rpc = BrowserView.defineRPC<MdviewRPC>({
       },
       getInitialFile: () => {
         // Check CLI args for a file path
-        const args = process.argv;
-        for (const arg of args) {
-          if (!arg.startsWith("-") && (arg.endsWith(".md") || arg.endsWith(".markdown") || arg.endsWith(".mdown") || arg.endsWith(".mkd") || arg.endsWith(".mkdn") || arg.endsWith(".mdx") || arg.endsWith(".txt"))) {
-            return arg;
-          }
-        }
-        // Also check for any non-flag arg that might be a file
-        for (let i = 1; i < args.length; i++) {
-          const arg = args[i];
-          if (!arg.startsWith("-")) {
-            try {
-              if (existsSync(arg)) return arg;
-            } catch {}
-          }
-        }
-        return null;
+        return getInitialFileFromArgs();
       },
       findProjectRoot: ({ filePath }) => {
         return findProjectRoot(filePath);
@@ -433,9 +472,8 @@ Electrobun.events.on("application-menu-clicked", (e) => {
   }
 
   if (action === "export_pdf") {
-    win.webview.rpc.send.showError({
-      message: "Export as PDF is not yet supported.\n\nCurrent options:\n- Use your browser's print dialog (Cmd+P from within the webview) and choose Save as PDF",
-    });
+    // Use native print workflow and allow users to save as PDF from the OS dialog.
+    win.webview.executeJavascript("window.print();");
     return;
   }
 
@@ -458,3 +496,12 @@ Electrobun.events.on("application-menu-clicked", (e) => {
     return;
   }
 });
+const SUPPORTED_MARKDOWN_EXTENSIONS = [
+  ".md",
+  ".markdown",
+  ".mdown",
+  ".mkd",
+  ".mkdn",
+  ".mdx",
+  ".txt",
+];
