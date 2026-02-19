@@ -82,6 +82,8 @@ async function openFile(filePath) {
     invoke("find_project_root", { filePath: currentFilePath }).then((root) => {
       currentProjectRoot = root;
     });
+
+    invoke("set_file_menu_enabled", { enabled: true });
   } catch (err) {
     const contentEl = document.getElementById("content");
     contentEl.innerHTML = `<div id="welcome"><h1>Error</h1><p>${err}</p></div>`;

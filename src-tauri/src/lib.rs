@@ -24,6 +24,31 @@ struct AppState {
     font_items: Mutex<Vec<CheckMenuItem<Wry>>>,
 }
 
+struct FileMenuItems {
+    copy_file_path: tauri::menu::MenuItem<Wry>,
+    copy_dir_path: tauri::menu::MenuItem<Wry>,
+    copy_project_path: tauri::menu::MenuItem<Wry>,
+    reveal_finder: tauri::menu::MenuItem<Wry>,
+    export_pdf_item: tauri::menu::MenuItem<Wry>,
+}
+
+#[tauri::command]
+fn export_pdf() -> Result<(), String> {
+    Err(
+        "Programmatic 'Export as PDF' without showing the print dialog isn't supported by Tauri/Wry on macOS yet.\n\nCurrent options:\n- Keep the print dialog (window.print()) and use Save as PDF\n- Implement a custom HTML->PDF export (e.g. render to PDF via a Rust PDF library, or generate PDF in JS and save via the filesystem plugin)"
+            .to_string(),
+    )
+}
+
+#[tauri::command]
+fn set_file_menu_enabled(enabled: bool, items: State<FileMenuItems>) {
+    let _ = items.copy_file_path.set_enabled(enabled);
+    let _ = items.copy_dir_path.set_enabled(enabled);
+    let _ = items.copy_project_path.set_enabled(enabled);
+    let _ = items.reveal_finder.set_enabled(enabled);
+    let _ = items.export_pdf_item.set_enabled(enabled);
+}
+
 fn set_font_checked(font_items: &[CheckMenuItem<Wry>], active_id: &str) {
     for item in font_items {
         let _ = item.set_checked(item.id().0.as_str() == active_id);
@@ -258,6 +283,8 @@ pub fn run() {
             find_project_root,
             reveal_in_finder,
             sync_font_menu,
+            export_pdf,
+            set_file_menu_enabled,
             is_md_associated,
             set_md_association,
         ])
@@ -280,12 +307,27 @@ pub fn run() {
                 .enabled(false)
                 .build(app)?;
 
+            let export_pdf_item = MenuItemBuilder::with_id("export_pdf", "Export as PDF…")
+                .accelerator("Cmd+P")
+                .enabled(false)
+                .build(app)?;
+
+            app.manage(FileMenuItems {
+                copy_file_path: copy_file_path.clone(),
+                copy_dir_path: copy_dir_path.clone(),
+                copy_project_path: copy_project_path.clone(),
+                reveal_finder: reveal_finder.clone(),
+                export_pdf_item: export_pdf_item.clone(),
+            });
+
             let file_menu = SubmenuBuilder::new(app, "File")
                 .item(&copy_file_path)
                 .item(&copy_dir_path)
                 .item(&copy_project_path)
                 .separator()
                 .item(&reveal_finder)
+                .separator()
+                .item(&export_pdf_item)
                 .build()?;
 
             // --- View > Font menu ---
@@ -391,6 +433,15 @@ pub fn run() {
                     }
                     "reveal_finder" => {
                         let _ = app_handle.emit("menu-action", "reveal_finder");
+                    }
+                    "export_pdf" => {
+                        if let Some(w) = app_handle.get_webview_window("main") {
+                            if let Err(msg) = export_pdf() {
+                                let _ = app_handle.emit("show-error", msg);
+                            } else {
+                                let _ = w.eval("window.print()");
+                            }
+                        }
                     }
                     "associate_md" => {
                         let now_checked = associate_md_item.is_checked().unwrap_or(false);
