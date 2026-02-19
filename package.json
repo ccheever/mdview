@@ -4,16 +4,12 @@
   "description": "A lightweight markdown viewer for macOS",
   "private": true,
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
-    "tauri": "tauri"
+    "start": "bun run build:dev && electrobun dev",
+    "build:dev": "bun install && electrobun build",
+    "build:release": "electrobun build --release"
   },
   "dependencies": {
-    "@tauri-apps/api": "^2.9.1",
-    "@tauri-apps/plugin-clipboard-manager": "^2.3.2",
-    "@tauri-apps/plugin-dialog": "^2.6.0",
-    "@tauri-apps/plugin-shell": "^2.3.4",
+    "electrobun": "latest",
     "highlight.js": "^11.11.0",
     "markdown-it": "^14.1.0",
     "markdown-it-anchor": "^9.2.0",
@@ -22,7 +18,6 @@
     "markdown-it-task-lists": "^2.1.1"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2",
-    "vite": "^6"
+    "@types/bun": "latest"
   }
 }
