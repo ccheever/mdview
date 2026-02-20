@@ -2,7 +2,7 @@
 
 A lightweight, native markdown viewer for macOS. Opens `.md` files and renders them in a clean, readable format -- like Preview.app but for Markdown.
 
-Built with [Tauri](https://tauri.app/) (Rust + WebView) and [markdown-it](https://github.com/markdown-it/markdown-it) for fast startup, small binary size, and high-quality rendering.
+Built with [Electrobun](https://blackboard.sh/electrobun/) and [markdown-it](https://github.com/markdown-it/markdown-it)
 
 ## Features
 
@@ -10,7 +10,7 @@ Built with [Tauri](https://tauri.app/) (Rust + WebView) and [markdown-it](https:
 - **High-fidelity rendering** via markdown-it (the same engine VS Code uses), with full CommonMark and GitHub Flavored Markdown support
 - **Syntax highlighting** for fenced code blocks
 - **Font selection** -- choose between a handful of fonts; defaults to the system font
-- **Lightweight** -- native Tauri app with no Electron overhead
+- **Lightweight** -- ~14 MB bundle, <50ms startup, ~15 MB RAM
 - **Tables, task lists, footnotes, and frontmatter** support out of the box
 
 ## Usage
@@ -26,35 +26,18 @@ mdview README.md
 
 ### Prerequisites
 
-- [Rust](https://www.rust-lang.org/tools/install) (stable)
-- [Node.js](https://nodejs.org/) (v18+)
-- [pnpm](https://pnpm.io/) (or npm/yarn)
+- [Bun](https://bun.sh/) (`curl -fsSL https://bun.sh/install | bash`)
 - Xcode Command Line Tools (`xcode-select --install`)
 
 ### Setup
 
 ```bash
-pnpm install
-pnpm tauri dev
+bun install
+bun run dev
 ```
 
 ### Build
 
 ```bash
-pnpm tauri build
+bun run build
 ```
-
-This produces a `.app` bundle in `src-tauri/target/release/bundle/macos/` and a standalone binary.
-
-## Tech Stack
-
-| Component | Choice | Rationale |
-|-----------|--------|-----------|
-| App framework | [Tauri v2](https://v2.tauri.app/) | Native webview, tiny binary (~5-10 MB), Rust backend |
-| Markdown engine | [markdown-it](https://github.com/markdown-it/markdown-it) | 100% CommonMark, used by VS Code, rich plugin ecosystem, secure by default |
-| Syntax highlighting | [highlight.js](https://highlightjs.org/) | Works directly with markdown-it's `highlight` option |
-| Frontend | Vanilla HTML/CSS/JS | No framework needed for a read-only viewer |
-
-## License
-
-MIT

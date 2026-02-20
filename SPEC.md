@@ -2,7 +2,7 @@
 
 ## Overview
 
-mdview is a standalone macOS application that renders Markdown files in a clean, readable format. It serves the same role as Preview.app does for PDFs -- a fast, native viewer that "just works."
+mdview is a standalone desktop application that renders Markdown files in a clean, readable format. It serves the same role as Preview.app does for PDFs -- a fast, native viewer that "just works."
 
 ## Goals
 
@@ -17,23 +17,27 @@ mdview is a standalone macOS application that renders Markdown files in a clean,
 - Live preview / split pane
 - File management or organization
 - Exporting to PDF/HTML (may be added later)
-- Cross-platform (macOS-only for v1; Tauri makes cross-platform possible later)
 
 ---
 
 ## Architecture
 
-### Tauri v2
+### Electrobun + Bun
 
-The app uses [Tauri](https://v2.tauri.app/) to create a native macOS application with a web-based UI rendered in a system WebView (WKWebView on macOS).
+The app uses [Electrobun](https://blackboard.sh/electrobun/) to create a native desktop application with a web-based UI rendered in the system WebView (WKWebView on macOS). The main process runs on [Bun](https://bun.sh/) -- a fast TypeScript runtime -- and communicates with the native layer via FFI.
 
 ```
 ┌──────────────────────────────────────────┐
-│  Tauri Shell (Rust)                      │
+│  Electrobun Main Process (Bun/TS)        │
 │  - File I/O (read .md files from disk)   │
 │  - CLI argument parsing                  │
-│  - macOS file association handling        │
-│  - Window management                     │
+│  - File association handling             │
+│  - Window & menu management              │
+│  - RPC to/from WebView                   │
+├──────────────────────────────────────────┤
+│  Native Layer (Zig/C++)                  │
+│  - Window chrome, system tray            │
+│  - Platform-specific integrations        │
 ├──────────────────────────────────────────┤
 │  WebView (HTML/CSS/JS)                   │
 │  - markdown-it renders MD → HTML         │
@@ -42,16 +46,23 @@ The app uses [Tauri](https://v2.tauri.app/) to create a native macOS application
 └──────────────────────────────────────────┘
 ```
 
-### Why Tauri over Electron
+### Why Electrobun
 
-| | Tauri | Electron |
-|---|---|---|
-| Binary size | ~5-10 MB | ~150+ MB |
-| RAM usage | ~30-50 MB | ~100-300 MB |
-| Startup time | Near-instant | 1-3 seconds |
-| Runtime | System WebView | Bundled Chromium |
+| | Electrobun | Electron | Tauri |
+|---|---|---|---|
+| Bundle size | ~14 MB | ~150+ MB | ~25 MB |
+| RAM usage | ~15-30 MB | ~100-300 MB | ~30-50 MB |
+| Startup time | <50ms | 2-5 seconds | ~500ms |
+| Runtime | Bun + System WebView | Node + Bundled Chromium | Rust + System WebView |
+| Language | TypeScript | JavaScript | Rust + JS |
+| Updates | BSDIFF patches (~14 KB) | Full re-download (~100+ MB) | ~10 MB |
 
-For a simple viewer app, Tauri's lightweight footprint is the right choice.
+Electrobun is the best fit for mdview because:
+- **All TypeScript** -- one language for the entire app, no Rust toolchain needed
+- **Smallest footprint** -- a simple viewer app should be tiny
+- **Bun runtime** -- fast startup, native file I/O, built-in bundler
+- **Built-in auto-updater** with minimal differential patches
+- **Cross-platform** -- macOS, Windows, and Linux from the same codebase
 
 ### Why markdown-it
 
@@ -90,9 +101,9 @@ mdview path/to/file.md
 - Drag and drop a `.md` file onto the mdview icon
 
 **From the app:**
-- File → Open (Cmd+O) opens a file picker filtered to `.md` / `.markdown` / `.mdown` files
+- File → Open (Cmd+O) opens a native file dialog filtered to `.md` / `.markdown` / `.mdown` files
 
-The Tauri Rust backend reads the file from disk and passes the raw markdown string to the WebView for rendering.
+The Bun main process reads the file from disk using `Bun.file()` and sends the raw markdown string to the WebView for rendering via Electrobun's RPC mechanism.
 
 ### 2. Markdown Rendering
 
@@ -146,7 +157,7 @@ Users can choose from a small set of fonts for the document body:
 | **Monospace** | `"SF Mono", Menlo, Monaco, monospace` |
 | **Readable** | `Charter, "Bitstream Charter", "Sitka Text", Cambria, serif` |
 
-Font selection is accessible via a small dropdown or menu bar option (View → Font). The choice is persisted across sessions using Tauri's local storage or a simple JSON config file.
+Font selection is accessible via View → Font in the application menu. The choice is persisted across sessions in a JSON config file in the app's data directory.
 
 Code blocks always use a monospace font regardless of the body font setting.
 
@@ -177,7 +188,7 @@ Code blocks always use a monospace font regardless of the body font setting.
 
 ### 7. File Watching (v1 stretch goal)
 
-Optionally watch the open file for changes and re-render automatically. Useful when editing a markdown file in another app and using mdview as a live preview.
+Optionally watch the open file for changes and re-render automatically using Bun's built-in `fs.watch()`. Useful when editing a markdown file in another app and using mdview as a live preview.
 
 ---
 
@@ -208,7 +219,7 @@ The `.app` bundle registers as a handler for these file extensions:
 - `.mkdn`
 - `.mdx`
 
-This is configured in the Tauri bundle configuration (`tauri.conf.json`) under `bundle > macOS > fileAssociations`.
+This is configured in the Electrobun build configuration (`electrobun.config.ts`) under the macOS bundle settings.
 
 ---
 
@@ -219,18 +230,18 @@ mdview/
 ├── README.md
 ├── SPEC.md
 ├── LICENSE
-├── package.json            # Node dependencies (markdown-it, highlight.js)
-├── pnpm-lock.yaml
-├── src/                    # Frontend (WebView)
-│   ├── index.html          # Main HTML shell
-│   ├── main.js             # markdown-it setup, rendering logic, font switching
-│   └── styles.css          # Document styling, light/dark themes, font classes
-├── src-tauri/              # Tauri / Rust backend
-│   ├── Cargo.toml
-│   ├── tauri.conf.json     # App config, window settings, file associations
-│   ├── src/
-│   │   └── main.rs         # File I/O, CLI args, IPC commands
-│   └── icons/              # App icons
+├── package.json            # Bun dependencies (markdown-it, highlight.js, electrobun)
+├── bun.lock
+├── electrobun.config.ts    # Electrobun build config, window settings, file associations
+├── src/
+│   ├── main.ts             # Bun main process: file I/O, CLI args, window/menu setup, RPC
+│   └── views/
+│       └── mainview/
+│           ├── index.html  # Main HTML shell
+│           ├── main.ts     # markdown-it setup, rendering logic, font switching
+│           └── styles.css  # Document styling, light/dark themes, font classes
+├── icons/                  # App icons
+│   └── AppIcon.icns
 └── .gitignore
 ```
 
@@ -240,23 +251,23 @@ mdview/
 
 ### Development
 ```bash
-pnpm install
-pnpm tauri dev
+bun install
+bun run dev
 ```
 
 ### Production Build
 ```bash
-pnpm tauri build
+bun run build
 ```
 
 **Outputs:**
-- `src-tauri/target/release/bundle/macos/mdview.app` -- macOS app bundle (double-clickable)
-- `src-tauri/target/release/mdview` -- standalone binary
+- `dist/mdview.app` -- macOS app bundle (double-clickable)
+- Self-extracting ZSTD compressed distributable (~14 MB)
 
 ### Distribution Options
 - Direct `.app` download
 - Homebrew cask (`brew install --cask mdview`)
-- DMG installer (Tauri can generate this)
+- Built-in auto-updater with BSDIFF differential patches
 
 ---
 
@@ -264,8 +275,8 @@ pnpm tauri build
 
 - **Print / Export to PDF** via the WebView's native print support
 - **Table of contents** sidebar for long documents
-- **Search within document** (Cmd+F, using WebView's built-in find)
+- **Search within document** (Cmd+F, using Electrobun's find-in-page support)
 - **Multiple windows** for viewing several files at once
-- **Cross-platform** builds for Windows and Linux
+- **Cross-platform** builds for Windows and Linux (Electrobun supports all three)
 - **Custom CSS** support for advanced users
 - **Math rendering** via KaTeX plugin
