@@ -5,7 +5,7 @@ import Electrobun, {
   Utils,
 } from "electrobun/bun";
 import { join, dirname, resolve, basename } from "path";
-import { homedir } from "os";
+import { homedir, tmpdir } from "os";
 import type { MdviewRPC } from "../rpc";
 
 // ── Settings persistence ──
@@ -104,7 +104,7 @@ async function readMarkdownFile(filePath: string) {
 // ── RPC handlers ──
 
 const rpc = BrowserView.defineRPC<MdviewRPC>({
-  maxRequestTime: 10000,
+  maxRequestTime: 30000,
   handlers: {
     requests: {
       readFile: async ({ path }) => {
@@ -158,9 +158,12 @@ const win = new BrowserWindow({
 
 // ── Open a file and send to webview ──
 
+let currentFilePath: string | null = null;
+
 async function openFile(filePath: string) {
   try {
     const data = await readMarkdownFile(filePath);
+    currentFilePath = data.filePath;
     win.setTitle(`${basename(data.filePath)} — mdview`);
     win.webview.rpc?.send.loadFile({
       content: data.content,
@@ -292,7 +295,39 @@ Electrobun.events.on("application-menu-clicked", async (e) => {
   } else if (action === "close-window") {
     win.close();
   } else if (action === "file-export-pdf") {
-    win.webview.executeJavascript(`window.print();`);
+    // Determine default filename from current file
+    const defaultName = currentFilePath
+      ? basename(currentFilePath).replace(/\.[^.]+$/, "") + ".pdf"
+      : "document.pdf";
+
+    // Use osascript to show a native save dialog
+    try {
+      const proc = Bun.spawnSync([
+        "osascript",
+        "-e",
+        `set theFile to choose file name with prompt "Export as PDF" default name "${defaultName}"`,
+        "-e",
+        `POSIX path of theFile`,
+      ]);
+      const savePath = proc.stdout.toString().trim();
+      if (savePath) {
+        // Ensure .pdf extension
+        const pdfPath = savePath.endsWith(".pdf") ? savePath : savePath + ".pdf";
+
+        // Request PDF data from the webview
+        const result = await win.webview.rpc?.request.exportPDF({});
+        if (result?.pdfBase64) {
+          // Decode base64 and write to disk
+          const buffer = Buffer.from(result.pdfBase64, "base64");
+          await Bun.write(pdfPath, buffer);
+          // Open the PDF in the default viewer
+          Utils.openPath(pdfPath);
+        }
+      }
+    } catch (err) {
+      // User cancelled the save dialog or an error occurred
+      console.error("PDF export failed:", err);
+    }
   } else if (action?.startsWith("font-")) {
     const font = action.replace("font-", "");
     currentFont = font;

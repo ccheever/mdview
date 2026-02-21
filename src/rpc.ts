@@ -31,7 +31,12 @@ export type MdviewRPC = {
     messages: {};
   }>;
   webview: RPCSchema<{
-    requests: {};
+    requests: {
+      exportPDF: {
+        params: {};
+        response: { pdfBase64: string };
+      };
+    };
     messages: {
       loadFile: {
         content: string;

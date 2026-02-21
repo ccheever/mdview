@@ -5,6 +5,8 @@ import taskLists from "markdown-it-task-lists";
 import frontMatter from "markdown-it-front-matter";
 import anchor from "markdown-it-anchor";
 import hljs from "highlight.js";
+import html2canvas from "html2canvas";
+import { jsPDF } from "jspdf";
 import type { MdviewRPC } from "../rpc";
 
 // ── markdown-it setup ──
@@ -83,12 +85,92 @@ function applySize(size: number) {
   document.documentElement.style.setProperty("--font-size", `${size}px`);
 }
 
+// ── PDF export ──
+
+async function generatePDF(): Promise<string> {
+  // Capture the content element as a canvas
+  const canvas = await html2canvas(contentEl, {
+    scale: 2,
+    useCORS: true,
+    logging: false,
+  });
+
+  const imgData = canvas.toDataURL("image/jpeg", 0.95);
+  const imgWidth = canvas.width;
+  const imgHeight = canvas.height;
+
+  // Use letter size (8.5 x 11 inches) in points
+  const pageWidth = 612;
+  const pageHeight = 792;
+  const margin = 36; // 0.5 inch margins
+  const usableWidth = pageWidth - margin * 2;
+  const usableHeight = pageHeight - margin * 2;
+
+  // Scale image to fit page width
+  const scale = usableWidth / imgWidth;
+  const scaledHeight = imgHeight * scale;
+
+  const pdf = new jsPDF({
+    orientation: "portrait",
+    unit: "pt",
+    format: "letter",
+  });
+
+  // If content fits on one page
+  if (scaledHeight <= usableHeight) {
+    pdf.addImage(imgData, "JPEG", margin, margin, usableWidth, scaledHeight);
+  } else {
+    // Split across multiple pages
+    let remainingHeight = imgHeight;
+    let sourceY = 0;
+    let isFirstPage = true;
+
+    while (remainingHeight > 0) {
+      if (!isFirstPage) {
+        pdf.addPage();
+      }
+
+      // How much of the source image fits on this page
+      const sliceHeight = Math.min(remainingHeight, usableHeight / scale);
+
+      // Create a canvas for this page's slice
+      const pageCanvas = document.createElement("canvas");
+      pageCanvas.width = imgWidth;
+      pageCanvas.height = sliceHeight;
+      const ctx = pageCanvas.getContext("2d")!;
+      ctx.drawImage(
+        canvas,
+        0, sourceY, imgWidth, sliceHeight,
+        0, 0, imgWidth, sliceHeight
+      );
+
+      const pageImgData = pageCanvas.toDataURL("image/jpeg", 0.95);
+      const pageScaledHeight = sliceHeight * scale;
+      pdf.addImage(pageImgData, "JPEG", margin, margin, usableWidth, pageScaledHeight);
+
+      sourceY += sliceHeight;
+      remainingHeight -= sliceHeight;
+      isFirstPage = false;
+    }
+  }
+
+  // Return as base64 (strip the data:application/pdf;base64, prefix)
+  const pdfOutput = pdf.output("datauristring");
+  const base64 = pdfOutput.split(",")[1];
+  return base64;
+}
+
 // ── RPC setup ──
 
 const rpc = Electroview.defineRPC<MdviewRPC>({
-  maxRequestTime: 10000,
+  maxRequestTime: 30000,
   handlers: {
-    requests: {},
+    requests: {
+      exportPDF: async () => {
+        const pdfBase64 = await generatePDF();
+        return { pdfBase64 };
+      },
+    },
     messages: {
       loadFile: ({ content, filePath, dirPath }) => {
         renderMarkdown(content, dirPath);
