@@ -316,17 +316,20 @@ Electrobun.events.on("application-menu-clicked", async (e) => {
 
     // Use osascript to show a native save dialog
     try {
-      const locationClause = defaultDir
-        ? ` default location POSIX file "${defaultDir}"`
-        : "";
+      const script = defaultDir
+        ? `set theFile to choose file name with prompt "Export as PDF" default name "${defaultName}" default location (POSIX file "${defaultDir}" as alias)`
+        : `set theFile to choose file name with prompt "Export as PDF" default name "${defaultName}"`;
+      console.log("PDF export osascript:", script);
       const proc = Bun.spawnSync([
         "osascript",
         "-e",
-        `set theFile to choose file name with prompt "Export as PDF" default name "${defaultName}"${locationClause}`,
+        script,
         "-e",
         `POSIX path of theFile`,
       ]);
       const savePath = proc.stdout.toString().trim();
+      const errOut = proc.stderr.toString().trim();
+      if (errOut) console.error("osascript stderr:", errOut);
       if (savePath) {
         // Ensure .pdf extension
         const pdfPath = savePath.endsWith(".pdf") ? savePath : savePath + ".pdf";
