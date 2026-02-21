@@ -81,37 +81,7 @@ if (values.font) {
   }
 }
 
-// ── Find the app bundle ──
-
-function findApp(): string | null {
-  const candidates = [
-    // Dev build locations relative to this script's project
-    "/Users/ccheever/projects/mdview/build/dev-macos-arm64/mdview-dev.app",
-    join(import.meta.dir, "../../build/dev-macos-arm64/mdview-dev.app"),
-    join(import.meta.dir, "../../build/dev-macos-x64/mdview-dev.app"),
-    join(import.meta.dir, "../../build/macos-arm64/mdview.app"),
-    join(import.meta.dir, "../../build/macos-x64/mdview.app"),
-    join(homedir(), "Applications/mdview.app"),
-    "/Applications/mdview.app",
-  ];
-
-  for (const candidate of candidates) {
-    if (existsSync(candidate)) {
-      return candidate;
-    }
-  }
-  return null;
-}
-
-const appPath = findApp();
-if (!appPath) {
-  console.error(
-    "Could not find mdview.app. Install it to /Applications or build it first with `bun run build`."
-  );
-  process.exit(1);
-}
-
-// ── Open each file in the app ──
+// ── Open each file via mdview:// URL scheme ──
 
 for (const fileArg of positionals) {
   const absPath = resolve(fileArg);
@@ -121,8 +91,8 @@ for (const fileArg of positionals) {
     continue;
   }
 
-  // -n opens a new instance for each file
-  const proc = Bun.spawn(["open", "-n", "-a", appPath, "--args", absPath], {
+  const url = `mdview://${encodeURIComponent(absPath)}`;
+  const proc = Bun.spawn(["open", url], {
     stdio: ["ignore", "ignore", "pipe"],
   });
 

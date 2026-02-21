@@ -380,11 +380,15 @@ Electrobun.events.on("application-menu-clicked", async (e) => {
   }
 });
 
-// ── CLI argument: open file passed on command line ──
+// ── Handle mdview:// URL scheme for opening files ──
 
-const args = Bun.argv.slice(2);
-const fileArg = args.find((a) => !a.startsWith("-"));
-if (fileArg) {
-  // Wait briefly for webview to be ready before sending
-  setTimeout(() => openFile(fileArg), 300);
-}
+Electrobun.events.on("open-url", async (e) => {
+  const url = e.data.url;
+  if (url.startsWith("mdview://")) {
+    // mdview:///path/to/file.md → /path/to/file.md
+    const filePath = decodeURIComponent(url.replace("mdview://", ""));
+    if (filePath) {
+      await openFile(filePath);
+    }
+  }
+});

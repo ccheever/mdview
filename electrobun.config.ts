@@ -5,6 +5,7 @@ export default {
     name: "mdview",
     identifier: "com.ccheever.mdview",
     version: "0.1.0",
+    urlSchemes: ["mdview"],
   },
   build: {
     views: {
