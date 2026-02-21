@@ -230,6 +230,16 @@ function buildMenuConfig() {
       submenu: [{ role: "copy" }, { role: "selectAll" }],
     },
     {
+      label: "View",
+      submenu: [
+        {
+          label: "Enter Full Screen",
+          action: "view-fullscreen",
+          accelerator: "CommandOrControl+Shift+F",
+        },
+      ],
+    },
+    {
       label: "Font",
       submenu: fontItems.map((item) => ({
         ...item,
@@ -294,6 +304,9 @@ Electrobun.events.on("application-menu-clicked", async (e) => {
     }
   } else if (action === "close-window") {
     win.close();
+  } else if (action === "view-fullscreen") {
+    const isFullScreen = win.isFullScreen();
+    win.setFullScreen(!isFullScreen);
   } else if (action === "file-export-pdf") {
     // Determine default filename from current file
     const defaultName = currentFilePath
