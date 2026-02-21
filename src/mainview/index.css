@@ -1,0 +1,456 @@
+/* ── CSS Custom Properties ── */
+:root {
+  --font-size: 16px;
+  --bg: #ffffff;
+  --text: #1a1a1a;
+  --text-muted: #656d76;
+  --link: #0969da;
+  --border: #d0d7de;
+  --border-light: #e8e8e8;
+  --code-bg: #f6f8fa;
+  --code-text: #1f2328;
+  --blockquote-border: #d0d7de;
+  --blockquote-text: #656d76;
+  --table-stripe: #f6f8fa;
+  --highlight-bg: #fff8c5;
+  --hr-color: #d0d7de;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117;
+    --text: #e6edf3;
+    --text-muted: #8b949e;
+    --link: #58a6ff;
+    --border: #30363d;
+    --border-light: #21262d;
+    --code-bg: #161b22;
+    --code-text: #e6edf3;
+    --blockquote-border: #30363d;
+    --blockquote-text: #8b949e;
+    --table-stripe: #161b22;
+    --highlight-bg: #bb800926;
+    --hr-color: #30363d;
+  }
+}
+
+/* ── Base ── */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  font-size: var(--font-size);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Article Layout ── */
+#content {
+  max-width: 750px;
+  margin: 0 auto;
+  padding: 32px 24px 64px;
+}
+
+/* ── Welcome Screen ── */
+.welcome {
+  text-align: center;
+  padding-top: 20vh;
+  color: var(--text-muted);
+}
+
+.welcome h1 {
+  color: var(--text);
+  font-size: 2em;
+  margin-bottom: 0.25em;
+}
+
+.welcome p {
+  font-size: 1.1em;
+}
+
+.welcome .hint {
+  font-size: 0.9em;
+  margin-top: 2em;
+  opacity: 0.6;
+}
+
+/* ── Typography ── */
+#content h1, #content h2, #content h3,
+#content h4, #content h5, #content h6 {
+  margin-top: 1.5em;
+  margin-bottom: 0.5em;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+#content h1 { font-size: 2em; padding-bottom: 0.3em; border-bottom: 1px solid var(--border); }
+#content h2 { font-size: 1.5em; padding-bottom: 0.3em; border-bottom: 1px solid var(--border); }
+#content h3 { font-size: 1.25em; }
+#content h4 { font-size: 1em; }
+#content h5 { font-size: 0.875em; }
+#content h6 { font-size: 0.85em; color: var(--text-muted); }
+
+#content p {
+  margin-top: 0;
+  margin-bottom: 1em;
+}
+
+#content a {
+  color: var(--link);
+  text-decoration: none;
+}
+
+#content a:hover {
+  text-decoration: underline;
+}
+
+#content strong {
+  font-weight: 600;
+}
+
+#content img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+}
+
+/* ── Lists ── */
+#content ul, #content ol {
+  margin-top: 0;
+  margin-bottom: 1em;
+  padding-left: 2em;
+}
+
+#content li {
+  margin-bottom: 0.25em;
+}
+
+#content li > p {
+  margin-bottom: 0.5em;
+}
+
+#content li + li {
+  margin-top: 0.25em;
+}
+
+/* ── Task Lists ── */
+#content .task-list-item {
+  list-style-type: none;
+  margin-left: -1.5em;
+}
+
+#content .task-list-item input[type="checkbox"] {
+  margin-right: 0.5em;
+  vertical-align: middle;
+  position: relative;
+  top: -1px;
+}
+
+/* ── Blockquotes ── */
+#content blockquote {
+  margin: 0 0 1em;
+  padding: 0.5em 1em;
+  border-left: 4px solid var(--blockquote-border);
+  color: var(--blockquote-text);
+}
+
+#content blockquote > :first-child { margin-top: 0; }
+#content blockquote > :last-child { margin-bottom: 0; }
+
+/* ── Code ── */
+#content code {
+  font-family: "SF Mono", SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.875em;
+  background: var(--code-bg);
+  color: var(--code-text);
+  padding: 0.2em 0.4em;
+  border-radius: 4px;
+}
+
+#content pre {
+  margin-top: 0;
+  margin-bottom: 1em;
+  padding: 16px;
+  overflow-x: auto;
+  background: var(--code-bg);
+  border-radius: 6px;
+  line-height: 1.45;
+}
+
+#content pre code {
+  background: none;
+  padding: 0;
+  font-size: 0.85em;
+  border-radius: 0;
+}
+
+/* ── Tables ── */
+#content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 1em;
+  overflow-x: auto;
+  display: block;
+}
+
+#content thead {
+  display: table-header-group;
+}
+
+#content tr {
+  display: table-row;
+  border-top: 1px solid var(--border);
+}
+
+#content table, #content thead, #content tbody, #content tr {
+  display: revert;
+}
+
+#content th, #content td {
+  padding: 8px 16px;
+  border: 1px solid var(--border);
+  text-align: left;
+}
+
+#content th {
+  font-weight: 600;
+  background: var(--code-bg);
+}
+
+#content tbody tr:nth-child(even) {
+  background: var(--table-stripe);
+}
+
+/* ── Horizontal Rule ── */
+#content hr {
+  height: 2px;
+  border: 0;
+  background: var(--hr-color);
+  margin: 2em 0;
+}
+
+/* ── Footnotes ── */
+#content .footnotes {
+  margin-top: 2em;
+  padding-top: 1em;
+  border-top: 1px solid var(--border);
+  font-size: 0.9em;
+  color: var(--text-muted);
+}
+
+#content .footnotes ol {
+  padding-left: 1.5em;
+}
+
+#content sup.footnote-ref a {
+  text-decoration: none;
+  font-weight: 600;
+}
+
+#content a.footnote-backref {
+  text-decoration: none;
+}
+
+/* ── Definition Lists ── */
+#content dt {
+  font-weight: 600;
+  margin-top: 1em;
+}
+
+#content dd {
+  margin-left: 2em;
+  margin-bottom: 0.5em;
+}
+
+/* ── Font Classes ── */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+
+.font-system {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+
+.font-inter {
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+.font-serif {
+  font-family: Georgia, "Times New Roman", serif;
+}
+
+.font-sans {
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+
+.font-mono {
+  font-family: "SF Mono", SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+.font-readable {
+  font-family: Charter, "Bitstream Charter", "Sitka Text", Cambria, serif;
+}
+
+/* ── highlight.js GitHub Theme (Light) ── */
+.hljs {
+  color: #24292e;
+}
+
+.hljs-comment,
+.hljs-quote {
+  color: #6a737d;
+  font-style: italic;
+}
+
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-subst {
+  color: #d73a49;
+}
+
+.hljs-number,
+.hljs-literal,
+.hljs-variable,
+.hljs-template-variable,
+.hljs-tag .hljs-attr {
+  color: #005cc5;
+}
+
+.hljs-string,
+.hljs-doctag {
+  color: #032f62;
+}
+
+.hljs-title,
+.hljs-section,
+.hljs-selector-id {
+  color: #6f42c1;
+  font-weight: bold;
+}
+
+.hljs-type,
+.hljs-class .hljs-title {
+  color: #6f42c1;
+}
+
+.hljs-tag,
+.hljs-name,
+.hljs-attribute {
+  color: #22863a;
+}
+
+.hljs-symbol,
+.hljs-bullet,
+.hljs-link {
+  color: #005cc5;
+}
+
+.hljs-built_in,
+.hljs-builtin-name {
+  color: #005cc5;
+}
+
+.hljs-meta {
+  color: #735c0f;
+}
+
+.hljs-deletion {
+  color: #b31d28;
+  background-color: #ffeef0;
+}
+
+.hljs-addition {
+  color: #22863a;
+  background-color: #f0fff4;
+}
+
+.hljs-emphasis {
+  font-style: italic;
+}
+
+.hljs-strong {
+  font-weight: bold;
+}
+
+/* ── highlight.js GitHub Theme (Dark) ── */
+@media (prefers-color-scheme: dark) {
+  .hljs {
+    color: #e6edf3;
+  }
+
+  .hljs-comment,
+  .hljs-quote {
+    color: #8b949e;
+    font-style: italic;
+  }
+
+  .hljs-keyword,
+  .hljs-selector-tag,
+  .hljs-subst {
+    color: #ff7b72;
+  }
+
+  .hljs-number,
+  .hljs-literal,
+  .hljs-variable,
+  .hljs-template-variable,
+  .hljs-tag .hljs-attr {
+    color: #79c0ff;
+  }
+
+  .hljs-string,
+  .hljs-doctag {
+    color: #a5d6ff;
+  }
+
+  .hljs-title,
+  .hljs-section,
+  .hljs-selector-id {
+    color: #d2a8ff;
+    font-weight: bold;
+  }
+
+  .hljs-type,
+  .hljs-class .hljs-title {
+    color: #d2a8ff;
+  }
+
+  .hljs-tag,
+  .hljs-name,
+  .hljs-attribute {
+    color: #7ee787;
+  }
+
+  .hljs-symbol,
+  .hljs-bullet,
+  .hljs-link {
+    color: #79c0ff;
+  }
+
+  .hljs-built_in,
+  .hljs-builtin-name {
+    color: #79c0ff;
+  }
+
+  .hljs-meta {
+    color: #d29922;
+  }
+
+  .hljs-deletion {
+    color: #ffdcd7;
+    background-color: #67060c;
+  }
+
+  .hljs-addition {
+    color: #aff5b4;
+    background-color: #033a16;
+  }
+}

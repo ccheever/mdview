@@ -1,28 +1,26 @@
 {
   "name": "mdview",
   "version": "0.1.0",
-  "description": "A lightweight markdown viewer for macOS",
-  "private": true,
+  "bin": {
+    "mdview": "src/cli.ts"
+  },
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
-    "tauri": "tauri"
+    "dev": "electrobun dev",
+    "build": "electrobun build"
   },
   "dependencies": {
-    "@tauri-apps/api": "^2.9.1",
-    "@tauri-apps/plugin-clipboard-manager": "^2.3.2",
-    "@tauri-apps/plugin-dialog": "^2.6.0",
-    "@tauri-apps/plugin-shell": "^2.3.4",
-    "highlight.js": "^11.11.0",
-    "markdown-it": "^14.1.0",
-    "markdown-it-anchor": "^9.2.0",
+    "electrobun": "latest",
+    "highlight.js": "^11.9.0",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^4.2.0",
+    "markdown-it": "14.1.1",
+    "markdown-it-anchor": "^9.0.0",
     "markdown-it-footnote": "^4.0.0",
     "markdown-it-front-matter": "^0.2.4",
     "markdown-it-task-lists": "^2.1.1"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2",
-    "vite": "^6"
+    "@types/bun": "latest",
+    "@types/markdown-it": "^14.0.0"
   }
 }
