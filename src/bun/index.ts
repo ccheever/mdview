@@ -308,17 +308,21 @@ Electrobun.events.on("application-menu-clicked", async (e) => {
     const isFullScreen = win.isFullScreen();
     win.setFullScreen(!isFullScreen);
   } else if (action === "file-export-pdf") {
-    // Determine default filename from current file
+    // Determine default filename and directory from current file
     const defaultName = currentFilePath
       ? basename(currentFilePath).replace(/\.[^.]+$/, "") + ".pdf"
       : "document.pdf";
+    const defaultDir = currentFilePath ? dirname(currentFilePath) : null;
 
     // Use osascript to show a native save dialog
     try {
+      const locationClause = defaultDir
+        ? ` default location POSIX file "${defaultDir}"`
+        : "";
       const proc = Bun.spawnSync([
         "osascript",
         "-e",
-        `set theFile to choose file name with prompt "Export as PDF" default name "${defaultName}"`,
+        `set theFile to choose file name with prompt "Export as PDF" default name "${defaultName}"${locationClause}`,
         "-e",
         `POSIX path of theFile`,
       ]);
