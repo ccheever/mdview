@@ -85,13 +85,14 @@ if (values.font) {
 
 function findApp(): string | null {
   const candidates = [
-    "/Applications/mdview.app",
-    join(homedir(), "Applications/mdview.app"),
     // Dev build locations relative to this script's project
+    "/Users/ccheever/projects/mdview/build/dev-macos-arm64/mdview-dev.app",
     join(import.meta.dir, "../../build/dev-macos-arm64/mdview-dev.app"),
     join(import.meta.dir, "../../build/dev-macos-x64/mdview-dev.app"),
     join(import.meta.dir, "../../build/macos-arm64/mdview.app"),
     join(import.meta.dir, "../../build/macos-x64/mdview.app"),
+    join(homedir(), "Applications/mdview.app"),
+    "/Applications/mdview.app",
   ];
 
   for (const candidate of candidates) {
