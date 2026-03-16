@@ -324,7 +324,7 @@ index f2083ac..a18a2b0 100644
 \ No newline at end of file
 +}
 diff --git a/package/src/native/macos/nativeWrapper.mm b/package/src/native/macos/nativeWrapper.mm
-index 38450b1..625e2c2 100644
+index 38450b1..fed6388 100644
 --- a/package/src/native/macos/nativeWrapper.mm
 +++ b/package/src/native/macos/nativeWrapper.mm
 @@ -489,6 +489,7 @@ typedef struct {
@@ -459,7 +459,38 @@ index 38450b1..625e2c2 100644
          g_shutdownComplete.store(true);
      }
  }
-@@ -6393,6 +6499,11 @@ extern "C" void setURLOpenHandler(URLOpenHandler handler) {
+@@ -5441,6 +5547,30 @@ extern "C" void webviewReload(AbstractView *abstractView) {
+     });
+ }
+ 
++extern "C" void webviewPrint(AbstractView *abstractView) {
++    if (!abstractView || !globalAbstractViews[@(abstractView.webviewId)]) {
++        return;
++    }
++
++    dispatch_async(dispatch_get_main_queue(), ^{
++        if ([abstractView isKindOfClass:[WKWebViewImpl class]]) {
++            WKWebViewImpl *wkImpl = (WKWebViewImpl *)abstractView;
++            WKWebView *webView = wkImpl.webView;
++
++            NSPrintInfo *printInfo = [NSPrintInfo sharedPrintInfo];
++            [printInfo setTopMargin:36];
++            [printInfo setBottomMargin:36];
++            [printInfo setLeftMargin:36];
++            [printInfo setRightMargin:36];
++
++            NSPrintOperation *printOp = [webView printOperationWithPrintInfo:printInfo];
++            [printOp setShowsPrintPanel:YES];
++            [printOp setShowsProgressPanel:YES];
++            [printOp runOperation];
++        }
++    });
++}
++
+ extern "C" void webviewRemove(AbstractView *abstractView) {
+     NSLog(@"webviewRemove: ENTRY - abstractView=%p", abstractView);
+     
+@@ -6393,6 +6523,11 @@ extern "C" void setURLOpenHandler(URLOpenHandler handler) {
      g_urlOpenHandler = handler;
  }
  

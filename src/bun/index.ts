@@ -6,10 +6,22 @@ import Electrobun, {
 	type RPCSchema,
 } from "electrobun/bun";
 import { readFileSync, existsSync, watchFile, unwatchFile, writeFileSync, unlinkSync } from "fs";
-import { resolve, basename, extname, join } from "path";
+import { resolve, basename, extname, join, dirname } from "path";
 import { tmpdir } from "os";
+import { dlopen, suffix, FFIType } from "bun:ffi";
 
 const MD_EXTENSIONS = new Set([".md", ".markdown", ".mdown", ".mkd", ".mkdn", ".mdx"]);
+
+// Load native wrapper for print support
+const libPath = join(dirname(process.argv0), `libNativeWrapper.${suffix}`);
+let nativeLib: any = null;
+try {
+	nativeLib = dlopen(libPath, {
+		webviewPrint: { args: [FFIType.ptr], returns: FFIType.void },
+	});
+} catch {
+	console.log("Could not load native wrapper for print support");
+}
 
 // RPC schema for main <-> webview communication
 type MdviewRPC = {
@@ -28,7 +40,7 @@ type MdviewRPC = {
 			};
 			setFont: { fontFamily: string };
 			setFontSize: { size: number };
-			print: {};
+			setAppearance: { mode: string };
 		};
 	}>;
 	webview: RPCSchema<{
@@ -97,7 +109,7 @@ function openFile(filePath: string) {
 			filename,
 		});
 
-		// Watch for changes
+		// Watch for changes and auto-reload
 		if (watchedFilePath) {
 			unwatchFile(watchedFilePath);
 		}
@@ -119,64 +131,98 @@ function openFile(filePath: string) {
 	}
 }
 
-// Set up application menu (delay slightly to ensure native app is ready)
-setTimeout(() => {
-ApplicationMenu.setApplicationMenu([
-	{
-		label: "mdview",
-		submenu: [
-			{ label: "About mdview", role: "about" },
-			{ type: "divider" },
-			{ label: "Quit mdview", role: "quit", accelerator: "CommandOrControl+Q" },
-		],
-	},
-	{
-		label: "File",
-		submenu: [
-			{ label: "Open…", action: "open-file", accelerator: "CommandOrControl+O" },
-			{ type: "divider" },
-			{ label: "Print…", action: "print", accelerator: "CommandOrControl+P" },
-			{ label: "Export as PDF…", action: "export-pdf" },
-			{ type: "divider" },
-			{ label: "Close Window", role: "close", accelerator: "CommandOrControl+W" },
-		],
-	},
-	{
-		label: "Edit",
-		submenu: [
-			{ label: "Copy", role: "copy", accelerator: "CommandOrControl+C" },
-			{ label: "Select All", role: "selectAll", accelerator: "CommandOrControl+A" },
-		],
-	},
-	{
-		label: "View",
-		submenu: [
-			{ label: "Reload", action: "reload", accelerator: "CommandOrControl+R" },
-			{ type: "divider" },
-			{ label: "Bigger", action: "zoom-in", accelerator: "CommandOrControl+=" },
-			{ label: "Smaller", action: "zoom-out", accelerator: "CommandOrControl+-" },
-			{ label: "Actual Size", action: "zoom-reset", accelerator: "CommandOrControl+0" },
-			{ type: "divider" },
-			{ label: "System Default", action: "font-system" },
-			{ label: "Serif", action: "font-serif" },
-			{ label: "Sans-serif", action: "font-sans" },
-			{ label: "Monospace", action: "font-mono" },
-			{ label: "Readable", action: "font-readable" },
-		],
-	},
-]);
-}, 100);
+function printWebView() {
+	if (nativeLib) {
+		// Use native NSPrintOperation for proper print/PDF export
+		const webviewPtr = (mainWindow.webview as any).ptr;
+		if (webviewPtr) {
+			nativeLib.symbols.webviewPrint(webviewPtr);
+			return;
+		}
+	}
+	console.log("Print not available");
+}
 
-// Font families
+// State
 const FONTS: Record<string, string> = {
 	"font-system": "-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif",
 	"font-serif": "Georgia, 'Times New Roman', serif",
 	"font-sans": "'Helvetica Neue', Helvetica, Arial, sans-serif",
 	"font-mono": "'SF Mono', Menlo, Monaco, monospace",
 	"font-readable": "Charter, 'Bitstream Charter', 'Sitka Text', Cambria, serif",
+	"font-inter": "Inter, -apple-system, BlinkMacSystemFont, sans-serif",
 };
 
+const FONT_LABELS: Record<string, string> = {
+	"font-system": "System Default",
+	"font-serif": "Serif",
+	"font-sans": "Sans-serif",
+	"font-mono": "Monospace",
+	"font-readable": "Readable",
+	"font-inter": "Inter",
+};
+
+let currentFont = "font-system";
 let currentFontSize = 16;
+let currentAppearance = "auto"; // "auto", "light", "dark"
+
+function rebuildMenu() {
+	ApplicationMenu.setApplicationMenu([
+		{
+			label: "mdview",
+			submenu: [
+				{ label: "About mdview", role: "about" },
+				{ type: "divider" },
+				{ label: "Install Command Line Tool…", action: "install-cli" },
+				{ type: "divider" },
+				{ label: "Quit mdview", role: "quit", accelerator: "CommandOrControl+Q" },
+			],
+		},
+		{
+			label: "File",
+			submenu: [
+				{ label: "Open…", action: "open-file", accelerator: "CommandOrControl+O" },
+				{ type: "divider" },
+				{ label: "Print…", action: "print", accelerator: "CommandOrControl+P" },
+				{ label: "Export as PDF…", action: "export-pdf" },
+				{ type: "divider" },
+				{ label: "Close Window", role: "close", accelerator: "CommandOrControl+W" },
+			],
+		},
+		{
+			label: "Edit",
+			submenu: [
+				{ label: "Copy", role: "copy", accelerator: "CommandOrControl+C" },
+				{ label: "Select All", role: "selectAll", accelerator: "CommandOrControl+A" },
+			],
+		},
+		{
+			label: "View",
+			submenu: [
+				{ label: "Reload", action: "reload", accelerator: "CommandOrControl+R" },
+				{ type: "divider" },
+				{ label: "Bigger", action: "zoom-in", accelerator: "CommandOrControl+=" },
+				{ label: "Smaller", action: "zoom-out", accelerator: "CommandOrControl+-" },
+				{ label: "Actual Size", action: "zoom-reset", accelerator: "CommandOrControl+0" },
+				{ type: "divider" },
+				{ label: "Automatic", action: "appearance-auto", checked: currentAppearance === "auto" },
+				{ label: "Light", action: "appearance-light", checked: currentAppearance === "light" },
+				{ label: "Dark", action: "appearance-dark", checked: currentAppearance === "dark" },
+			],
+		},
+		{
+			label: "Font",
+			submenu: Object.entries(FONT_LABELS).map(([key, label]) => ({
+				label,
+				action: key,
+				checked: currentFont === key,
+			})),
+		},
+	]);
+}
+
+// Set up application menu (delay slightly to ensure native app is ready)
+setTimeout(rebuildMenu, 100);
 
 // Handle menu actions
 Electrobun.events.on("application-menu-clicked", async (event) => {
@@ -194,10 +240,8 @@ Electrobun.events.on("application-menu-clicked", async (event) => {
 		}
 	} else if (action === "reload" && watchedFilePath) {
 		openFile(watchedFilePath);
-	} else if (action === "print") {
-		mainWindow.webview.rpc.send("print", {});
-	} else if (action === "export-pdf") {
-		mainWindow.webview.rpc.send("print", {});
+	} else if (action === "print" || action === "export-pdf") {
+		printWebView();
 	} else if (action === "zoom-in") {
 		currentFontSize = Math.min(32, currentFontSize + 2);
 		mainWindow.webview.rpc.send("setFontSize", { size: currentFontSize });
@@ -210,17 +254,58 @@ Electrobun.events.on("application-menu-clicked", async (event) => {
 	} else if (action && action.startsWith("font-")) {
 		const fontFamily = FONTS[action];
 		if (fontFamily) {
+			currentFont = action;
 			mainWindow.webview.rpc.send("setFont", { fontFamily });
+			rebuildMenu();
 		}
+	} else if (action && action.startsWith("appearance-")) {
+		currentAppearance = action.replace("appearance-", "");
+		mainWindow.webview.rpc.send("setAppearance", { mode: currentAppearance });
+		rebuildMenu();
+	} else if (action === "install-cli") {
+		installCLI();
 	}
 });
+
+// Install CLI tool
+async function installCLI() {
+	const cliScript = [
+		"#!/bin/bash",
+		"# mdview - Open markdown files in mdview",
+		'if [ $# -eq 0 ]; then',
+		'    open -b com.ccheever.mdview',
+		'else',
+		'    for f in "$@"; do',
+		'        open -b com.ccheever.mdview "$f"',
+		'    done',
+		'fi',
+		'',
+	].join("\n");
+
+	const tmpPath = join(tmpdir(), "mdview-cli-install");
+	const targetPath = "/usr/local/bin/mdview";
+
+	try {
+		writeFileSync(tmpPath, cliScript, { mode: 0o755 });
+		const proc = Bun.spawn([
+			"osascript", "-e",
+			`do shell script "cp ${tmpPath} ${targetPath} && chmod +x ${targetPath}" with administrator privileges`,
+		]);
+		await proc.exited;
+		try { unlinkSync(tmpPath); } catch {}
+		if (proc.exitCode === 0) {
+			console.log("CLI tool installed at /usr/local/bin/mdview");
+		}
+	} catch {
+		console.error("Failed to install CLI tool");
+	}
+}
 
 // Handle files opened from Finder / file associations
 Electrobun.events.on("open-file", (event) => {
 	const filePath = event.data.path;
 	console.log("open-file event:", filePath);
 
-	// Only open markdown files — ignore other args (e.g. launcher scripts)
 	const ext = extname(filePath).toLowerCase();
 	if (!MD_EXTENSIONS.has(ext)) {
 		console.log(`Ignoring non-markdown file: ${filePath}`);
@@ -231,8 +316,6 @@ Electrobun.events.on("open-file", (event) => {
 });
 
 // Watch for file-open signals from the native Apple Event handler.
-// The native side writes file paths to a temp file because the JSCallback
-// mechanism doesn't work reliably from within the NSApplication event loop.
 const signalFilePath = join(tmpdir(), `electrobun-open-file-${process.pid}`);
 writeFileSync(signalFilePath, "");
 watchFile(signalFilePath, { interval: 300 }, () => {

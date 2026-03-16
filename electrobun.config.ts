@@ -21,6 +21,7 @@ export default {
 			bundleCEF: false,
 			defaultRenderer: "native",
 			codesign: false,
+			icons: "icons/AppIcon.iconset",
 		},
 		linux: {
 			bundleCEF: false,

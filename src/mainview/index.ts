@@ -95,7 +95,7 @@ type MdviewRPC = {
 			};
 			setFont: { fontFamily: string };
 			setFontSize: { size: number };
-			print: {};
+			setAppearance: { mode: string };
 		};
 	}>;
 	webview: RPCSchema<{
@@ -118,8 +118,15 @@ const rpc = Electroview.defineRPC<MdviewRPC>({
 			setFontSize: (data) => {
 				document.documentElement.style.setProperty("--mdview-font-size", `${data.size}px`);
 			},
-			print: () => {
-				window.print();
+			setAppearance: (data) => {
+				const root = document.documentElement;
+				root.removeAttribute("data-theme");
+				if (data.mode === "light") {
+					root.setAttribute("data-theme", "light");
+				} else if (data.mode === "dark") {
+					root.setAttribute("data-theme", "dark");
+				}
+				// "auto" removes the attribute, falling back to @media queries
 			},
 		},
 	},
