@@ -93,6 +93,9 @@ type MdviewRPC = {
 				filePath: string;
 				filename: string;
 			};
+			setFont: { fontFamily: string };
+			setFontSize: { size: number };
+			print: {};
 		};
 	}>;
 	webview: RPCSchema<{
@@ -108,6 +111,15 @@ const rpc = Electroview.defineRPC<MdviewRPC>({
 		messages: {
 			renderMarkdown: (data) => {
 				renderMarkdown(data.content, data.filePath);
+			},
+			setFont: (data) => {
+				document.documentElement.style.setProperty("--mdview-font-family", data.fontFamily);
+			},
+			setFontSize: (data) => {
+				document.documentElement.style.setProperty("--mdview-font-size", `${data.size}px`);
+			},
+			print: () => {
+				window.print();
 			},
 		},
 	},

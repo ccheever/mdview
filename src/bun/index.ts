@@ -26,6 +26,9 @@ type MdviewRPC = {
 				filePath: string;
 				filename: string;
 			};
+			setFont: { fontFamily: string };
+			setFontSize: { size: number };
+			print: {};
 		};
 	}>;
 	webview: RPCSchema<{
@@ -132,6 +135,9 @@ ApplicationMenu.setApplicationMenu([
 		submenu: [
 			{ label: "Open…", action: "open-file", accelerator: "CommandOrControl+O" },
 			{ type: "divider" },
+			{ label: "Print…", action: "print", accelerator: "CommandOrControl+P" },
+			{ label: "Export as PDF…", action: "export-pdf" },
+			{ type: "divider" },
 			{ label: "Close Window", role: "close", accelerator: "CommandOrControl+W" },
 		],
 	},
@@ -146,26 +152,66 @@ ApplicationMenu.setApplicationMenu([
 		label: "View",
 		submenu: [
 			{ label: "Reload", action: "reload", accelerator: "CommandOrControl+R" },
+			{ type: "divider" },
+			{ label: "Bigger", action: "zoom-in", accelerator: "CommandOrControl+=" },
+			{ label: "Smaller", action: "zoom-out", accelerator: "CommandOrControl+-" },
+			{ label: "Actual Size", action: "zoom-reset", accelerator: "CommandOrControl+0" },
+			{ type: "divider" },
+			{ label: "System Default", action: "font-system" },
+			{ label: "Serif", action: "font-serif" },
+			{ label: "Sans-serif", action: "font-sans" },
+			{ label: "Monospace", action: "font-mono" },
+			{ label: "Readable", action: "font-readable" },
 		],
 	},
 ]);
 }, 100);
 
+// Font families
+const FONTS: Record<string, string> = {
+	"font-system": "-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif",
+	"font-serif": "Georgia, 'Times New Roman', serif",
+	"font-sans": "'Helvetica Neue', Helvetica, Arial, sans-serif",
+	"font-mono": "'SF Mono', Menlo, Monaco, monospace",
+	"font-readable": "Charter, 'Bitstream Charter', 'Sitka Text', Cambria, serif",
+};
+
+let currentFontSize = 16;
+
 // Handle menu actions
 Electrobun.events.on("application-menu-clicked", async (event) => {
-	if (event.data.action === "open-file") {
+	const action = event.data.action;
+
+	if (action === "open-file") {
 		const result = await Utils.openFileDialog({
 			allowedFileTypes: "md,markdown,mdown,mkd,mkdn,mdx",
 			canChooseFiles: true,
 			canChooseDirectory: false,
 			allowsMultipleSelection: false,
 		});
-
 		if (result && result.length > 0) {
 			openFile(result[0]);
 		}
-	} else if (event.data.action === "reload" && watchedFilePath) {
+	} else if (action === "reload" && watchedFilePath) {
 		openFile(watchedFilePath);
+	} else if (action === "print") {
+		mainWindow.webview.rpc.send("print", {});
+	} else if (action === "export-pdf") {
+		mainWindow.webview.rpc.send("print", {});
+	} else if (action === "zoom-in") {
+		currentFontSize = Math.min(32, currentFontSize + 2);
+		mainWindow.webview.rpc.send("setFontSize", { size: currentFontSize });
+	} else if (action === "zoom-out") {
+		currentFontSize = Math.max(10, currentFontSize - 2);
+		mainWindow.webview.rpc.send("setFontSize", { size: currentFontSize });
+	} else if (action === "zoom-reset") {
+		currentFontSize = 16;
+		mainWindow.webview.rpc.send("setFontSize", { size: currentFontSize });
+	} else if (action && action.startsWith("font-")) {
+		const fontFamily = FONTS[action];
+		if (fontFamily) {
+			mainWindow.webview.rpc.send("setFont", { fontFamily });
+		}
 	}
 });
 
