@@ -1,0 +1,508 @@
+diff --git a/package/src/bun/ElectrobunConfig.ts b/package/src/bun/ElectrobunConfig.ts
+index 20e3b80..e1ea6e6 100644
+--- a/package/src/bun/ElectrobunConfig.ts
++++ b/package/src/bun/ElectrobunConfig.ts
+@@ -54,6 +54,14 @@ export interface ElectrobunConfig {
+ 		 *   console.log("Opened with URL:", e.data.url);
+ 		 * });
+ 		 * ```
++		 *
++		 * Files passed to the app at launch (including macOS file-open events and launcher
++		 * command-line arguments) are available via the "open-file" event:
++		 * ```typescript
++		 * Electrobun.events.on("open-file", (e) => {
++		 *   console.log("Opened file:", e.data.path);
++		 * });
++		 * ```
+ 		 */
+ 		urlSchemes?: string[];
+ 	};
+diff --git a/package/src/bun/events/ApplicationEvents.ts b/package/src/bun/events/ApplicationEvents.ts
+index dfb1cbe..5efd3b6 100644
+--- a/package/src/bun/events/ApplicationEvents.ts
++++ b/package/src/bun/events/ApplicationEvents.ts
+@@ -2,6 +2,7 @@ import ElectrobunEvent from "./event";
+ 
+ type MenuClickedData = { id?: number; action: string; data?: unknown };
+ type OpenUrlData = { url: string };
++type OpenFileData = { path: string };
+ 
+ export default {
+ 	applicationMenuClicked: (data: MenuClickedData) =>
+@@ -16,6 +17,8 @@ export default {
+ 		),
+ 	openUrl: (data: OpenUrlData) =>
+ 		new ElectrobunEvent<OpenUrlData, void>("open-url", data),
++	openFile: (data: OpenFileData) =>
++		new ElectrobunEvent<OpenFileData, void>("open-file", data),
+ 	beforeQuit: (data: {}) =>
+ 		new ElectrobunEvent<{}, { allow: boolean }>("before-quit", data),
+ };
+diff --git a/package/src/bun/index.ts b/package/src/bun/index.ts
+index 8c5187d..77598e7 100644
+--- a/package/src/bun/index.ts
++++ b/package/src/bun/index.ts
+@@ -26,7 +26,12 @@ import type ElectrobunEvent from "./events/event";
+ import * as PATHS from "./core/Paths";
+ import * as Socket from "./core/Socket";
+ import type { ElectrobunConfig } from "./ElectrobunConfig";
+-import { GlobalShortcut, Screen, Session } from "./proc/native";
++import {
++	dispatchStartupOpenFileEvents,
++	GlobalShortcut,
++	Screen,
++	Session,
++} from "./proc/native";
+ import type {
+ 	Display,
+ 	Rectangle,
+@@ -98,5 +103,7 @@ const Electrobun = {
+ 	Socket,
+ };
+ 
++dispatchStartupOpenFileEvents();
++
+ // Electrobun
+ export default Electrobun;
+diff --git a/package/src/bun/proc/native.ts b/package/src/bun/proc/native.ts
+index dfeff8e..23dc888 100644
+--- a/package/src/bun/proc/native.ts
++++ b/package/src/bun/proc/native.ts
+@@ -1,4 +1,4 @@
+-import { join } from "path";
++import { join, resolve } from "path";
+ import electrobunEventEmitter from "../events/eventEmitter";
+ import ElectrobunEvent from "../events/event";
+ import { BrowserView } from "../core/BrowserView";
+@@ -490,6 +490,10 @@ export const native = (() => {
+ 				args: [FFIType.function], // handler callback
+ 				returns: FFIType.void,
+ 			},
++			setOpenFileHandler: {
++				args: [FFIType.function], // handler callback
++				returns: FFIType.void,
++			},
+ 
+ 			// Window style utilities
+ 			getWindowStyle: {
+@@ -1288,6 +1292,63 @@ process.on("SIGTERM", () => {
+ 	quit();
+ });
+ 
++const ELECTROBUN_STARTUP_OPEN_FILES_ENV = "ELECTROBUN_STARTUP_OPEN_FILES";
++const emittedStartupOpenFiles = new Set<string>();
++
++function emitOpenFileEvent(path: string) {
++	const normalizedPath = resolve(path);
++	if (emittedStartupOpenFiles.has(normalizedPath)) {
++		return;
++	}
++
++	emittedStartupOpenFiles.add(normalizedPath);
++	const handler = electrobunEventEmitter.events.app.openFile;
++	const event = handler({ path: normalizedPath });
++	electrobunEventEmitter.emitEvent(event);
++}
++
++function getStartupOpenFiles(): string[] {
++	const raw = process.env[ELECTROBUN_STARTUP_OPEN_FILES_ENV];
++
++	if (raw) {
++		try {
++			const parsed = JSON.parse(raw);
++			if (Array.isArray(parsed)) {
++				return [...new Set(parsed)]
++					.map((candidate) => String(candidate))
++					.map((candidate) => candidate.trim())
++					.filter((candidate): candidate is string => candidate.length > 0)
++					.map((candidate) => resolve(candidate));
++			}
++		} catch {
++			// Ignore malformed env value and fall back to runtime args.
++		}
++	}
++
++	const runtimeArgs = process.argv.slice(2); // skip bun binary and script path
++	return [...new Set(runtimeArgs)]
++		.map((candidate) => String(candidate))
++		.map((candidate) => candidate.trim())
++		.filter((candidate): candidate is string => candidate.length > 0)
++		.filter((candidate) => !candidate.startsWith("-"))
++		.map((candidate) => resolve(candidate))
++		.filter((candidate) => existsSync(candidate));
++}
++
++export const dispatchStartupOpenFileEvents = (): void => {
++	const openPaths = getStartupOpenFiles();
++
++	if (openPaths.length === 0) {
++		return;
++	}
++
++	queueMicrotask(() => {
++		for (const path of openPaths) {
++			emitOpenFileEvent(path);
++		}
++	});
++};
++
+ // const testCallback = new JSCallback(
+ //   (windowId, x, y) => {
+ //     console.log(`TEST FFI Callback reffed GLOBALLY in js`);
+@@ -1434,6 +1495,24 @@ if (process.platform === "darwin") {
+ 	native.symbols.setURLOpenHandler(urlOpenCallback);
+ }
+ 
++// File open handler (file opens and command-line file args)
++const openFileCallback = new JSCallback(
++	(pathPtr) => {
++		const path = new CString(pathPtr).toString();
++		if (!path) {
++			return;
++		}
++		emitOpenFileEvent(path);
++	},
++	{
++		args: [FFIType.cstring],
++		returns: "void",
++		threadsafe: true,
++	},
++);
++
++native.symbols.setOpenFileHandler(openFileCallback);
++
+ // Quit requested callback - invoked by native code when system quit is requested
+ // (dock icon quit, menu quit, console close, etc.)
+ const quitRequestedCallback = new JSCallback(
+diff --git a/package/src/launcher/main.ts b/package/src/launcher/main.ts
+index f736add..69d2b08 100644
+--- a/package/src/launcher/main.ts
++++ b/package/src/launcher/main.ts
+@@ -10,6 +10,17 @@ const absoluteLibPath = resolve(libPath);
+ 
+ // Wrap main logic in a function to avoid top-level return
+ function main() {
++	const startupFileArgs = process.argv
++		.slice(2) // skip bun binary and main.js script path
++		.filter((arg) => !arg.startsWith("-"))
++		.map((arg) => resolve(arg))
++		.filter((arg) => existsSync(arg));
++
++	if (startupFileArgs.length > 0) {
++		process.env["ELECTROBUN_STARTUP_OPEN_FILES"] =
++			JSON.stringify(startupFileArgs);
++	}
++
+ 	// Read version.json early to get identifier, name, and channel for CEF initialization
+ 	let channel = "";
+ 	let identifier = "";
+diff --git a/package/src/launcher/main.zig b/package/src/launcher/main.zig
+index d43e111..97257a1 100644
+--- a/package/src/launcher/main.zig
++++ b/package/src/launcher/main.zig
+@@ -160,17 +160,34 @@ pub fn main() !void {
+     defer arena.deinit();
+     const arena_alloc = arena.allocator();
+ 
++    // Get launcher's own args so we can forward them to bun
++    const process_args = try std.process.argsAlloc(arena_alloc);
++
+     switch (builtin.os.tag) {
+         .macos => {
+             // macOS: launcher is in MacOS/, resources in Resources/
+             resources_path = try std.fs.path.join(arena_alloc, &.{ exe_dir, "..", "Resources", "main.js" });
+-            argv = &[_][]const u8{ "./bun", resources_path };
++            // Build argv: ["./bun", resources_path, ...extra_args]
++            var argv_list = std.ArrayList([]const u8).init(arena_alloc);
++            try argv_list.append("./bun");
++            try argv_list.append(resources_path);
++            // Forward any args passed to the launcher (skip argv[0] which is the launcher itself)
++            for (process_args[1..]) |arg| {
++                try argv_list.append(arg);
++            }
++            argv = try argv_list.toOwnedSlice();
+         },
+         .linux, .windows => {
+             // Linux/Windows: launcher is in bin/, resources in Resources/
+             resources_path = try std.fs.path.join(arena_alloc, &.{ exe_dir, "..", "Resources", "main.js" });
+             const bun_name = if (builtin.os.tag == .windows) "bun.exe" else "bun";
+-            argv = &[_][]const u8{ try std.fs.path.join(arena_alloc, &.{ exe_dir, bun_name }), resources_path };
++            var argv_list = std.ArrayList([]const u8).init(arena_alloc);
++            try argv_list.append(try std.fs.path.join(arena_alloc, &.{ exe_dir, bun_name }));
++            try argv_list.append(resources_path);
++            for (process_args[1..]) |arg| {
++                try argv_list.append(arg);
++            }
++            argv = try argv_list.toOwnedSlice();
+         },
+         else => @panic("Unsupported platform"),
+     }
+@@ -306,6 +323,61 @@ pub fn main() !void {
+             }
+         }
+ 
++        // On macOS, use execve to replace the launcher process with bun.
++        // This ensures the bun process inherits the launcher's PID, which means
++        // macOS Apple Events (e.g., file-open from Finder/dock drag) are delivered
++        // to the correct process — the one running the NSApplication event loop.
++        if (builtin.os.tag == .macos) {
++            // Build the bun path: exe_dir + "/bun"
++            const bun_path = std.fs.path.join(arena_alloc, &.{ exe_dir, "bun" }) catch {
++                std.debug.print("Failed to build bun path\n", .{});
++                std.process.exit(1);
++            };
++
++            // Change to the exe directory (bun expects to run from MacOS/)
++            var dir = std.fs.openDirAbsolute(exe_dir, .{}) catch {
++                std.debug.print("Failed to open exe directory\n", .{});
++                std.process.exit(1);
++            };
++            dir.setAsCwd() catch {
++                std.debug.print("Failed to set cwd\n", .{});
++                std.process.exit(1);
++            };
++            dir.close();
++
++            // Build null-terminated argv for execve
++            var exec_argv_list = std.ArrayList(?[*:0]const u8).init(arena_alloc);
++            for (argv) |arg| {
++                const z = arena_alloc.dupeZ(u8, arg) catch {
++                    std.debug.print("Failed to allocate arg\n", .{});
++                    std.process.exit(1);
++                };
++                exec_argv_list.append(z.ptr) catch {
++                    std.debug.print("Failed to append arg\n", .{});
++                    std.process.exit(1);
++                };
++            }
++            exec_argv_list.append(null) catch {
++                std.debug.print("Failed to append null\n", .{});
++                std.process.exit(1);
++            };
++
++            const bun_path_z = arena_alloc.dupeZ(u8, bun_path) catch {
++                std.debug.print("Failed to allocate bun path\n", .{});
++                std.process.exit(1);
++            };
++
++            // Get current environment for execve
++            const env = @as([*:null]const ?[*:0]const u8, @ptrCast(std.c.environ));
++
++            std.debug.print("Exec: {s}\n", .{bun_path});
++
++            const err = std.posix.execveZ(bun_path_z.ptr, @ptrCast(exec_argv_list.items.ptr), env);
++            // execve only returns on error
++            std.debug.print("execve failed: {}\n", .{err});
++            std.process.exit(1);
++        }
++
+         child_process.stdout_behavior = .Inherit;
+         child_process.stderr_behavior = .Inherit;
+ 
+diff --git a/package/src/native/linux/nativeWrapper.cpp b/package/src/native/linux/nativeWrapper.cpp
+index f2083ac..a18a2b0 100644
+--- a/package/src/native/linux/nativeWrapper.cpp
++++ b/package/src/native/linux/nativeWrapper.cpp
+@@ -9264,6 +9264,12 @@ ELECTROBUN_EXPORT void setURLOpenHandler(void (*callback)(const char*)) {
+     // Linux URL protocol handling is done via desktop file associations
+ }
+ 
++// setOpenFileHandler - Set the callback for handling file-open events from launcher args
++ELECTROBUN_EXPORT void setOpenFileHandler(void (*callback)(const char*)) {
++    // Not yet used on Linux - file-open support is currently sourced from launcher args
++    (void)callback;
++}
++
+ // Graceful shutdown function to coordinate cleanup
+ ELECTROBUN_EXPORT void shutdownNativeWrapper() {
+     printf("Starting graceful shutdown of native wrapper...\n");
+@@ -9281,4 +9287,4 @@ ELECTROBUN_EXPORT void shutdownNativeWrapper() {
+     printf("Native wrapper shutdown complete.\n");
+ }
+ 
+-}
+\ No newline at end of file
++}
+diff --git a/package/src/native/macos/nativeWrapper.mm b/package/src/native/macos/nativeWrapper.mm
+index 38450b1..625e2c2 100644
+--- a/package/src/native/macos/nativeWrapper.mm
++++ b/package/src/native/macos/nativeWrapper.mm
+@@ -489,6 +489,7 @@ typedef struct {
+ typedef SnapshotCallback zigSnapshotCallback;
+ typedef StatusItemHandler ZigStatusItemHandler;
+ static URLOpenHandler g_urlOpenHandler = nullptr;
++static OpenFileHandler g_openFileHandler = nullptr;
+ static QuitRequestedHandler g_quitRequestedHandler = nullptr;
+ static std::atomic<bool> g_shutdownComplete{false};
+ static std::atomic<bool> g_eventLoopStopping{false};
+@@ -5038,6 +5039,78 @@ CefRefPtr<CefRequestContext> CreateRequestContextForPartition(const char* partit
+             }
+         }
+     }
++
++    - (BOOL)application:(NSApplication *)application openFile:(NSString *)filename {
++        if (g_openFileHandler) {
++            g_openFileHandler([filename UTF8String]);
++            return YES;
++        }
++        NSLog(@"[File Handler] Received file but no handler registered: %@", filename);
++        return YES;
++    }
++
++    - (void)application:(NSApplication *)application openFiles:(NSArray<NSString *> *)filenames {
++        for (NSString *filename in filenames) {
++            if (g_openFileHandler) {
++                g_openFileHandler([filename UTF8String]);
++            } else {
++                NSLog(@"[File Handler] Received file but no handler registered: %@", filename);
++            }
++        }
++        [application replyToOpenOrPrint:NSApplicationDelegateReplySuccess];
++    }
++
++    - (void)handleOpenDocumentsEvent:(NSAppleEventDescriptor *)event withReplyEvent:(NSAppleEventDescriptor *)replyEvent {
++        NSAppleEventDescriptor *directObject = [event paramDescriptorForKeyword:keyDirectObject];
++        NSInteger count = [directObject numberOfItems];
++
++        // Collect all file paths from the Apple Event
++        NSMutableArray<NSString *> *paths = [NSMutableArray array];
++
++        if (count == 0) {
++            // Single item (not a list)
++            NSString *urlString = [directObject stringValue];
++            if (urlString) {
++                NSURL *url = [NSURL URLWithString:urlString];
++                NSString *path = url ? [url path] : urlString;
++                if (path) [paths addObject:path];
++            }
++        } else {
++            for (NSInteger i = 1; i <= count; i++) {
++                NSAppleEventDescriptor *item = [directObject descriptorAtIndex:i];
++                NSString *urlString = [item stringValue];
++                if (urlString) {
++                    NSURL *url = [NSURL URLWithString:urlString];
++                    NSString *path = url ? [url path] : urlString;
++                    if (path) [paths addObject:path];
++                }
++            }
++        }
++
++        // Dispatch the callback asynchronously on a background queue
++        // so we don't block the Apple Event handling, and the JSCallback
++        // threadsafe invocation has a chance to be processed by bun's Worker.
++        for (NSString *path in paths) {
++            NSString *pathCopy = [path copy];
++            // Write the file path to a signal file that the JS side watches.
++            // The JSCallback mechanism doesn't work reliably when called from
++            // within the NSApplication event loop, so we use file-based IPC.
++            NSString *tmpDir = NSTemporaryDirectory();
++            NSString *signalFile = [tmpDir stringByAppendingPathComponent:
++                [NSString stringWithFormat:@"electrobun-open-file-%d", getpid()]];
++
++            NSFileHandle *fh = [NSFileHandle fileHandleForWritingAtPath:signalFile];
++            if (fh) {
++                [fh seekToEndOfFile];
++                NSString *line = [NSString stringWithFormat:@"%@\n", pathCopy];
++                [fh writeData:[line dataUsingEncoding:NSUTF8StringEncoding]];
++                [fh closeFile];
++            } else {
++                NSString *line = [NSString stringWithFormat:@"%@\n", pathCopy];
++                [line writeToFile:signalFile atomically:YES encoding:NSUTF8StringEncoding error:nil];
++            }
++        }
++    }
+ @end
+ 
+ @implementation WindowDelegate
+@@ -5181,10 +5254,43 @@ extern "C" void startEventLoop(const char* identifier, const char* name, const c
+         }
+     } else {
+         NSApplication *app = [NSApplication sharedApplication];
++        [app setActivationPolicy:NSApplicationActivationPolicyRegular];
++        [app activateIgnoringOtherApps:YES];
+         AppDelegate *delegate = [[AppDelegate alloc] init];
+         [app setDelegate:delegate];
+         retainObjCObject(delegate);
+-        [app run];
++
++        // Ensure we call finishLaunching explicitly so the delegate receives
++        // application:openFiles: for startup files and future Apple Events
++        [app finishLaunching];
++
++        // Install explicit Apple Event handler for open-document events.
++        // The default NSApplication handling doesn't reliably forward
++        // kAEOpenDocuments to the delegate in exec'd process configurations.
++        [[NSAppleEventManager sharedAppleEventManager]
++            setEventHandler:delegate
++            andSelector:@selector(handleOpenDocumentsEvent:withReplyEvent:)
++            forEventClass:kCoreEventClass
++            andEventID:kAEOpenDocuments];
++
++        // Use a manual run loop instead of [app run] so we can process
++        // both NSApplication events and Apple Events properly, while also
++        // draining the main dispatch queue for async callbacks.
++        while (!g_eventLoopStopping.load()) {
++            @autoreleasepool {
++                NSEvent *event = [app nextEventMatchingMask:NSEventMaskAny
++                                                 untilDate:[NSDate dateWithTimeIntervalSinceNow:0.1]
++                                                    inMode:NSDefaultRunLoopMode
++                                                   dequeue:YES];
++                if (event) {
++                    [app sendEvent:event];
++                    [app updateWindows];
++                }
++                // Process any pending blocks on the main dispatch queue
++                [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode
++                                         beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.001]];
++            }
++        }
+         g_shutdownComplete.store(true);
+     }
+ }
+@@ -6393,6 +6499,11 @@ extern "C" void setURLOpenHandler(URLOpenHandler handler) {
+     g_urlOpenHandler = handler;
+ }
+ 
++// setOpenFileHandler - Set the callback for handling file-open requests
++extern "C" void setOpenFileHandler(OpenFileHandler handler) {
++    g_openFileHandler = handler;
++}
++
+ extern "C" NSStatusItem* createTray(uint32_t trayId, const char *title, const char *pathToImage, bool isTemplate,
+                                     uint32_t width, uint32_t height, ZigStatusItemHandler zigTrayItemHandler) {
+     
+diff --git a/package/src/native/shared/callbacks.h b/package/src/native/shared/callbacks.h
+index 6da5577..c0c4ebb 100644
+--- a/package/src/native/shared/callbacks.h
++++ b/package/src/native/shared/callbacks.h
+@@ -35,6 +35,9 @@ typedef void (*SnapshotCallback)(uint32_t hostId, uint32_t webviewId, const char
+ // URL open handler for deep linking
+ typedef void (*URLOpenHandler)(const char* url);
+ 
++// File open handler for file open events
++typedef void (*OpenFileHandler)(const char* path);
++
+ // Quit request handler - called by native code when quit is requested externally
+ // (e.g., dock icon quit, system shutdown, console close)
+ typedef void (*QuitRequestedHandler)();
+diff --git a/package/src/native/win/nativeWrapper.cpp b/package/src/native/win/nativeWrapper.cpp
+index 29fe632..c464120 100644
+--- a/package/src/native/win/nativeWrapper.cpp
++++ b/package/src/native/win/nativeWrapper.cpp
+@@ -10072,8 +10072,14 @@ extern "C" ELECTROBUN_EXPORT void setURLOpenHandler(void (*callback)(const char*
+     // Windows URL protocol handling is done via registry
+ }
+ 
++// File open handler - currently wired through launcher-provided startup args
++extern "C" ELECTROBUN_EXPORT void setOpenFileHandler(void (*callback)(const char*)) {
++    // Not yet implemented on Windows - use launcher argument forwarding first
++    (void)callback;
++}
++
+ // Window icon - Linux only, no-op for Windows
+ extern "C" ELECTROBUN_EXPORT void setWindowIcon(void* window, const char* iconPath) {
+     // Not yet implemented on Windows
+     // TODO: Implement using SetWindowIcon/LoadImage APIs
+-}
+\ No newline at end of file
++}
