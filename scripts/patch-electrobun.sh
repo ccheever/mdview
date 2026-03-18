@@ -10,12 +10,13 @@ set -euo pipefail
 
 MDVIEW_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 PATCHES_DIR="$MDVIEW_DIR/patches/electrobun"
-ELECTROBUN_DIR="${ELECTROBUN_DIR:-$(cd "$MDVIEW_DIR/../electrobun" && pwd)}"
+ELECTROBUN_DIR="${ELECTROBUN_DIR:-$MDVIEW_DIR/vendor/electrobun}"
 ELECTROBUN_PKG="$ELECTROBUN_DIR/package"
 
 if [ ! -d "$ELECTROBUN_PKG" ]; then
     echo "Error: Electrobun not found at $ELECTROBUN_PKG"
-    echo "Set ELECTROBUN_DIR to your electrobun checkout."
+    echo "Run 'git submodule update --init' to fetch the electrobun submodule,"
+    echo "or set ELECTROBUN_DIR to your electrobun checkout."
     exit 1
 fi
 

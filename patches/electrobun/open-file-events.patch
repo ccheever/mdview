@@ -1,5 +1,5 @@
 diff --git a/package/src/bun/ElectrobunConfig.ts b/package/src/bun/ElectrobunConfig.ts
-index 20e3b80..e1ea6e6 100644
+index 99dc558e..a522af01 100644
 --- a/package/src/bun/ElectrobunConfig.ts
 +++ b/package/src/bun/ElectrobunConfig.ts
 @@ -54,6 +54,14 @@ export interface ElectrobunConfig {
@@ -18,7 +18,7 @@ index 20e3b80..e1ea6e6 100644
  		urlSchemes?: string[];
  	};
 diff --git a/package/src/bun/events/ApplicationEvents.ts b/package/src/bun/events/ApplicationEvents.ts
-index dfb1cbe..5efd3b6 100644
+index 31151e08..69880efd 100644
 --- a/package/src/bun/events/ApplicationEvents.ts
 +++ b/package/src/bun/events/ApplicationEvents.ts
 @@ -2,6 +2,7 @@ import ElectrobunEvent from "./event";
@@ -35,29 +35,30 @@ index dfb1cbe..5efd3b6 100644
  		new ElectrobunEvent<OpenUrlData, void>("open-url", data),
 +	openFile: (data: OpenFileData) =>
 +		new ElectrobunEvent<OpenFileData, void>("open-file", data),
+ 	reopen: (data: {}) => new ElectrobunEvent<{}, void>("reopen", data),
  	beforeQuit: (data: {}) =>
  		new ElectrobunEvent<{}, { allow: boolean }>("before-quit", data),
- };
 diff --git a/package/src/bun/index.ts b/package/src/bun/index.ts
-index 8c5187d..77598e7 100644
+index 112a8a14..2053b6b8 100644
 --- a/package/src/bun/index.ts
 +++ b/package/src/bun/index.ts
-@@ -26,7 +26,12 @@ import type ElectrobunEvent from "./events/event";
- import * as PATHS from "./core/Paths";
- import * as Socket from "./core/Socket";
+@@ -32,7 +32,13 @@ import webgpu from "./webgpuAdapter";
+ import * as three from "three";
+ import * as babylon from "@babylonjs/core";
  import type { ElectrobunConfig } from "./ElectrobunConfig";
--import { GlobalShortcut, Screen, Session } from "./proc/native";
+-import { GlobalShortcut, Screen, Session, WGPUBridge } from "./proc/native";
 +import {
 +	dispatchStartupOpenFileEvents,
 +	GlobalShortcut,
 +	Screen,
 +	Session,
++	WGPUBridge,
 +} from "./proc/native";
  import type {
  	Display,
  	Rectangle,
-@@ -98,5 +103,7 @@ const Electrobun = {
- 	Socket,
+@@ -120,5 +126,7 @@ const Electrobun = {
+ 	babylon,
  };
  
 +dispatchStartupOpenFileEvents();
@@ -65,7 +66,7 @@ index 8c5187d..77598e7 100644
  // Electrobun
  export default Electrobun;
 diff --git a/package/src/bun/proc/native.ts b/package/src/bun/proc/native.ts
-index dfeff8e..23dc888 100644
+index 181c4f1e..b1500d04 100644
 --- a/package/src/bun/proc/native.ts
 +++ b/package/src/bun/proc/native.ts
 @@ -1,4 +1,4 @@
@@ -74,7 +75,7 @@ index dfeff8e..23dc888 100644
  import electrobunEventEmitter from "../events/eventEmitter";
  import ElectrobunEvent from "../events/event";
  import { BrowserView } from "../core/BrowserView";
-@@ -490,6 +490,10 @@ export const native = (() => {
+@@ -629,6 +629,10 @@ export const native = (() => {
  				args: [FFIType.function], // handler callback
  				returns: FFIType.void,
  			},
@@ -82,10 +83,10 @@ index dfeff8e..23dc888 100644
 +				args: [FFIType.function], // handler callback
 +				returns: FFIType.void,
 +			},
- 
- 			// Window style utilities
- 			getWindowStyle: {
-@@ -1288,6 +1292,63 @@ process.on("SIGTERM", () => {
+ 			setAppReopenHandler: {
+ 				args: [FFIType.function],
+ 				returns: FFIType.void,
+@@ -1756,6 +1760,63 @@ process.on("SIGTERM", () => {
  	quit();
  });
  
@@ -149,7 +150,7 @@ index dfeff8e..23dc888 100644
  // const testCallback = new JSCallback(
  //   (windowId, x, y) => {
  //     console.log(`TEST FFI Callback reffed GLOBALLY in js`);
-@@ -1434,6 +1495,24 @@ if (process.platform === "darwin") {
+@@ -1942,6 +2003,24 @@ if (process.platform === "darwin") {
  	native.symbols.setURLOpenHandler(urlOpenCallback);
  }
  
@@ -171,11 +172,11 @@ index dfeff8e..23dc888 100644
 +
 +native.symbols.setOpenFileHandler(openFileCallback);
 +
- // Quit requested callback - invoked by native code when system quit is requested
- // (dock icon quit, menu quit, console close, etc.)
- const quitRequestedCallback = new JSCallback(
+ const appReopenCallback = new JSCallback(
+ 	() => {
+ 		if (process.platform === "darwin") {
 diff --git a/package/src/launcher/main.ts b/package/src/launcher/main.ts
-index f736add..69d2b08 100644
+index f736add4..69d2b08a 100644
 --- a/package/src/launcher/main.ts
 +++ b/package/src/launcher/main.ts
 @@ -10,6 +10,17 @@ const absoluteLibPath = resolve(libPath);
@@ -197,7 +198,7 @@ index f736add..69d2b08 100644
  	let channel = "";
  	let identifier = "";
 diff --git a/package/src/launcher/main.zig b/package/src/launcher/main.zig
-index d43e111..97257a1 100644
+index 0713c595..6435f6c5 100644
 --- a/package/src/launcher/main.zig
 +++ b/package/src/launcher/main.zig
 @@ -160,17 +160,34 @@ pub fn main() !void {
@@ -237,7 +238,7 @@ index d43e111..97257a1 100644
          },
          else => @panic("Unsupported platform"),
      }
-@@ -306,6 +323,61 @@ pub fn main() !void {
+@@ -314,6 +331,61 @@ pub fn main() !void {
              }
          }
  
@@ -300,10 +301,10 @@ index d43e111..97257a1 100644
          child_process.stderr_behavior = .Inherit;
  
 diff --git a/package/src/native/linux/nativeWrapper.cpp b/package/src/native/linux/nativeWrapper.cpp
-index f2083ac..a18a2b0 100644
+index 36310d6f..b9431815 100644
 --- a/package/src/native/linux/nativeWrapper.cpp
 +++ b/package/src/native/linux/nativeWrapper.cpp
-@@ -9264,6 +9264,12 @@ ELECTROBUN_EXPORT void setURLOpenHandler(void (*callback)(const char*)) {
+@@ -10875,6 +10875,12 @@ ELECTROBUN_EXPORT void setURLOpenHandler(void (*callback)(const char*)) {
      // Linux URL protocol handling is done via desktop file associations
  }
  
@@ -313,33 +314,25 @@ index f2083ac..a18a2b0 100644
 +    (void)callback;
 +}
 +
- // Graceful shutdown function to coordinate cleanup
- ELECTROBUN_EXPORT void shutdownNativeWrapper() {
-     printf("Starting graceful shutdown of native wrapper...\n");
-@@ -9281,4 +9287,4 @@ ELECTROBUN_EXPORT void shutdownNativeWrapper() {
-     printf("Native wrapper shutdown complete.\n");
- }
- 
--}
-\ No newline at end of file
-+}
+ ELECTROBUN_EXPORT void setAppReopenHandler(void (*callback)()) {
+     (void)callback;
+     // Not supported on Linux - stub to prevent dlopen failure
 diff --git a/package/src/native/macos/nativeWrapper.mm b/package/src/native/macos/nativeWrapper.mm
-index 38450b1..fed6388 100644
+index 2ced7a87..293ae791 100644
 --- a/package/src/native/macos/nativeWrapper.mm
 +++ b/package/src/native/macos/nativeWrapper.mm
-@@ -489,6 +489,7 @@ typedef struct {
+@@ -506,6 +506,7 @@ - (BOOL)windowShouldClose:(id)sender {
  typedef SnapshotCallback zigSnapshotCallback;
  typedef StatusItemHandler ZigStatusItemHandler;
  static URLOpenHandler g_urlOpenHandler = nullptr;
 +static OpenFileHandler g_openFileHandler = nullptr;
+ static AppReopenHandler g_appReopenHandler = nullptr;
  static QuitRequestedHandler g_quitRequestedHandler = nullptr;
  static std::atomic<bool> g_shutdownComplete{false};
- static std::atomic<bool> g_eventLoopStopping{false};
-@@ -5038,6 +5039,78 @@ CefRefPtr<CefRequestContext> CreateRequestContextForPartition(const char* partit
-             }
+@@ -6287,6 +6288,78 @@ - (void)application:(NSApplication *)application openURLs:(NSArray<NSURL *> *)ur
          }
      }
-+
+ 
 +    - (BOOL)application:(NSApplication *)application openFile:(NSString *)filename {
 +        if (g_openFileHandler) {
 +            g_openFileHandler([filename UTF8String]);
@@ -411,10 +404,11 @@ index 38450b1..fed6388 100644
 +            }
 +        }
 +    }
- @end
++
+     - (BOOL)applicationShouldHandleReopen:(NSApplication *)application hasVisibleWindows:(BOOL)hasVisibleWindows {
+         (void)hasVisibleWindows;
  
- @implementation WindowDelegate
-@@ -5181,10 +5254,43 @@ extern "C" void startEventLoop(const char* identifier, const char* name, const c
+@@ -6455,10 +6528,43 @@ - (void)windowDidResignKey:(NSNotification *)notification {
          }
      } else {
          NSApplication *app = [NSApplication sharedApplication];
@@ -459,7 +453,7 @@ index 38450b1..fed6388 100644
          g_shutdownComplete.store(true);
      }
  }
-@@ -5441,6 +5547,30 @@ extern "C" void webviewReload(AbstractView *abstractView) {
+@@ -6791,6 +6897,30 @@ - (void)windowDidResignKey:(NSNotification *)notification {
      });
  }
  
@@ -488,9 +482,9 @@ index 38450b1..fed6388 100644
 +}
 +
  extern "C" void webviewRemove(AbstractView *abstractView) {
-     NSLog(@"webviewRemove: ENTRY - abstractView=%p", abstractView);
-     
-@@ -6393,6 +6523,11 @@ extern "C" void setURLOpenHandler(URLOpenHandler handler) {
+     if (!abstractView) {
+         return;
+@@ -7775,6 +7905,11 @@ static void showNotificationLegacy(NSString *titleStr, NSString *bodyStr, NSStri
      g_urlOpenHandler = handler;
  }
  
@@ -499,28 +493,28 @@ index 38450b1..fed6388 100644
 +    g_openFileHandler = handler;
 +}
 +
- extern "C" NSStatusItem* createTray(uint32_t trayId, const char *title, const char *pathToImage, bool isTemplate,
-                                     uint32_t width, uint32_t height, ZigStatusItemHandler zigTrayItemHandler) {
-     
+ extern "C" void setAppReopenHandler(AppReopenHandler handler) {
+     g_appReopenHandler = handler;
+ }
 diff --git a/package/src/native/shared/callbacks.h b/package/src/native/shared/callbacks.h
-index 6da5577..c0c4ebb 100644
+index f34f5ef6..567c338a 100644
 --- a/package/src/native/shared/callbacks.h
 +++ b/package/src/native/shared/callbacks.h
-@@ -35,6 +35,9 @@ typedef void (*SnapshotCallback)(uint32_t hostId, uint32_t webviewId, const char
+@@ -37,6 +37,9 @@ typedef void (*SnapshotCallback)(uint32_t hostId, uint32_t webviewId, const char
  // URL open handler for deep linking
  typedef void (*URLOpenHandler)(const char* url);
  
 +// File open handler for file open events
 +typedef void (*OpenFileHandler)(const char* path);
 +
- // Quit request handler - called by native code when quit is requested externally
- // (e.g., dock icon quit, system shutdown, console close)
- typedef void (*QuitRequestedHandler)();
+ // App reopen handler - called when the user re-opens an already running app
+ // (for example via Finder, Launchpad, or `open -a` on macOS)
+ typedef void (*AppReopenHandler)();
 diff --git a/package/src/native/win/nativeWrapper.cpp b/package/src/native/win/nativeWrapper.cpp
-index 29fe632..c464120 100644
+index 48bbc4eb..faa2e260 100644
 --- a/package/src/native/win/nativeWrapper.cpp
 +++ b/package/src/native/win/nativeWrapper.cpp
-@@ -10072,8 +10072,14 @@ extern "C" ELECTROBUN_EXPORT void setURLOpenHandler(void (*callback)(const char*
+@@ -11585,6 +11585,12 @@ extern "C" ELECTROBUN_EXPORT void setURLOpenHandler(void (*callback)(const char*
      // Windows URL protocol handling is done via registry
  }
  
@@ -530,10 +524,6 @@ index 29fe632..c464120 100644
 +    (void)callback;
 +}
 +
- // Window icon - Linux only, no-op for Windows
- extern "C" ELECTROBUN_EXPORT void setWindowIcon(void* window, const char* iconPath) {
-     // Not yet implemented on Windows
-     // TODO: Implement using SetWindowIcon/LoadImage APIs
--}
-\ No newline at end of file
-+}
+ // App reopen handler - macOS only, stub for Windows
+ extern "C" ELECTROBUN_EXPORT void setAppReopenHandler(void (*callback)()) {
+     (void)callback;
