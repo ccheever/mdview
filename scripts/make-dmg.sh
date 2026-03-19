@@ -5,14 +5,21 @@ set -euo pipefail
 # Usage: ./scripts/make-dmg.sh
 
 MDVIEW_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-APP_PATH="$MDVIEW_DIR/build/macos-arm64/mdview.app"
+# Prefer release build; fall back to dev build
+if [ -d "$MDVIEW_DIR/build/macos-arm64/mdview.app" ]; then
+    APP_PATH="$MDVIEW_DIR/build/macos-arm64/mdview.app"
+elif [ -d "$MDVIEW_DIR/build/dev-macos-arm64/mdview-dev.app" ]; then
+    APP_PATH="$MDVIEW_DIR/build/dev-macos-arm64/mdview-dev.app"
+else
+    APP_PATH=""
+fi
 DMG_DIR="$MDVIEW_DIR/build/dmg"
 DMG_NAME="mdview"
 DMG_PATH="$MDVIEW_DIR/build/$DMG_NAME.dmg"
 VOLUME_NAME="mdview"
 
-if [ ! -d "$APP_PATH" ]; then
-    echo "Error: $APP_PATH not found. Run 'bun run build' first."
+if [ -z "$APP_PATH" ] || [ ! -d "$APP_PATH" ]; then
+    echo "Error: No .app found in build/. Run 'bun run build' first."
     exit 1
 fi
 

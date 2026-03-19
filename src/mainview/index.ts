@@ -75,7 +75,58 @@ function renderMarkdown(content: string, filePath: string) {
 	});
 
 	// Scroll to top on new file
-	window.scrollTo(0, 0);
+	const mainEl = document.getElementById("main")!;
+	mainEl.scrollTo(0, 0);
+}
+
+function updateFileList(files: Array<{ path: string; filename: string; isCurrent: boolean }>) {
+	const listEl = document.getElementById("document-list")!;
+	const sidebarEl = document.getElementById("sidebar")!;
+	const welcomeEl = document.getElementById("welcome")!;
+	const contentEl = document.getElementById("content")!;
+
+	listEl.innerHTML = "";
+
+	if (files.length === 0) {
+		sidebarEl.classList.remove("visible");
+		welcomeEl.style.display = "";
+		contentEl.style.display = "none";
+		return;
+	}
+
+	// Show sidebar when there are 2+ files
+	if (files.length >= 2) {
+		sidebarEl.classList.add("visible");
+	} else {
+		sidebarEl.classList.remove("visible");
+	}
+
+	for (const file of files) {
+		const li = document.createElement("li");
+		li.className = "document-item" + (file.isCurrent ? " active" : "");
+		li.title = file.path;
+
+		const nameSpan = document.createElement("span");
+		nameSpan.className = "document-name";
+		nameSpan.textContent = file.filename;
+		li.appendChild(nameSpan);
+
+		const closeBtn = document.createElement("button");
+		closeBtn.className = "document-close";
+		closeBtn.textContent = "\u00d7";
+		closeBtn.title = "Close";
+		closeBtn.addEventListener("click", (e) => {
+			e.stopPropagation();
+			rpc.send("closeFile", { path: file.path });
+		});
+		li.appendChild(closeBtn);
+
+		li.addEventListener("click", () => {
+			rpc.send("selectFile", { path: file.path });
+		});
+
+		listEl.appendChild(li);
+	}
 }
 
 // RPC schema (matches main process)
@@ -93,6 +144,9 @@ type MdviewRPC = {
 				filePath: string;
 				filename: string;
 			};
+			updateFileList: {
+				files: Array<{ path: string; filename: string; isCurrent: boolean }>;
+			};
 			setFont: { fontFamily: string };
 			setFontSize: { size: number };
 			setAppearance: { mode: string };
@@ -100,7 +154,10 @@ type MdviewRPC = {
 	}>;
 	webview: RPCSchema<{
 		requests: {};
-		messages: {};
+		messages: {
+			selectFile: { path: string };
+			closeFile: { path: string };
+		};
 	}>;
 };
 
@@ -111,6 +168,9 @@ const rpc = Electroview.defineRPC<MdviewRPC>({
 		messages: {
 			renderMarkdown: (data) => {
 				renderMarkdown(data.content, data.filePath);
+			},
+			updateFileList: (data) => {
+				updateFileList(data.files);
 			},
 			setFont: (data) => {
 				document.documentElement.style.setProperty("--mdview-font-family", data.fontFamily);
@@ -147,29 +207,27 @@ document.addEventListener("drop", async (e) => {
 	const files = e.dataTransfer?.files;
 	if (!files || files.length === 0) return;
 
-	const file = files[0];
-	const name = file.name;
-
-	// Check if it's a markdown file
-	const ext = name.substring(name.lastIndexOf(".")).toLowerCase();
 	const mdExts = [".md", ".markdown", ".mdown", ".mkd", ".mkdn", ".mdx"];
-	if (!mdExts.includes(ext)) return;
 
-	// Try to get file path (may work in some webview implementations)
-	const path = (file as any).path;
-	if (path) {
-		const result = await rpc.request.readFile({ path });
-		if ("content" in result) {
-			renderMarkdown(result.content, result.path);
-			return;
+	for (const file of Array.from(files)) {
+		const name = file.name;
+		const ext = name.substring(name.lastIndexOf(".")).toLowerCase();
+		if (!mdExts.includes(ext)) continue;
+
+		const path = (file as any).path;
+		if (path) {
+			const result = await rpc.request.readFile({ path });
+			if ("content" in result) {
+				renderMarkdown(result.content, result.path);
+			}
+		} else {
+			// Fallback: read content directly via FileReader
+			const reader = new FileReader();
+			reader.onload = () => {
+				const content = reader.result as string;
+				renderMarkdown(content, name);
+			};
+			reader.readAsText(file);
 		}
 	}
-
-	// Fallback: read content directly via FileReader
-	const reader = new FileReader();
-	reader.onload = () => {
-		const content = reader.result as string;
-		renderMarkdown(content, name);
-	};
-	reader.readAsText(file);
 });

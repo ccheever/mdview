@@ -7,12 +7,19 @@
 	<link rel="stylesheet" href="index.css">
 </head>
 <body>
-	<div id="welcome">
-		<h1>mdview</h1>
-		<p>Open a Markdown file to get started.</p>
-		<p class="hint">File → Open (⌘O) or drag a .md file onto the app icon.</p>
+	<div id="app">
+		<aside id="sidebar">
+			<ul id="document-list"></ul>
+		</aside>
+		<main id="main">
+			<div id="welcome">
+				<h1>mdview</h1>
+				<p>Open a Markdown file to get started.</p>
+				<p class="hint">File → Open (⌘O) or drag a .md file onto the app icon.</p>
+			</div>
+			<article id="content" class="markdown-body" style="display: none;"></article>
+		</main>
 	</div>
-	<article id="content" class="markdown-body" style="display: none;"></article>
 	<script src="index.js"></script>
 </body>
 </html>
