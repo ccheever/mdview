@@ -157,6 +157,7 @@ type MdviewRPC = {
 		messages: {
 			selectFile: { path: string };
 			closeFile: { path: string };
+			ready: {};
 		};
 	}>;
 };
@@ -193,6 +194,9 @@ const rpc = Electroview.defineRPC<MdviewRPC>({
 });
 
 const electrobun = new Electrobun.Electroview({ rpc });
+
+// Signal to the main process that the webview is ready to receive RPC messages
+rpc.send("ready", {});
 
 // Handle drag-and-drop of files onto the window
 document.addEventListener("dragover", (e) => {

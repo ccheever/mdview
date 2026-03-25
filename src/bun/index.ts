@@ -5,7 +5,15 @@ import Electrobun, {
 	Utils,
 	type RPCSchema,
 } from "electrobun/bun";
-import { readFileSync, existsSync, watchFile, unwatchFile, writeFileSync, unlinkSync } from "fs";
+import {
+	readFileSync,
+	existsSync,
+	watchFile,
+	unwatchFile,
+	writeFileSync,
+	unlinkSync,
+	renameSync,
+} from "fs";
 import { resolve, basename, extname, join, dirname } from "path";
 import { tmpdir } from "os";
 import { dlopen, suffix, FFIType } from "bun:ffi";
@@ -51,6 +59,7 @@ type MdviewRPC = {
 		messages: {
 			selectFile: { path: string };
 			closeFile: { path: string };
+			ready: {};
 		};
 	}>;
 };
@@ -80,6 +89,14 @@ const rpc = BrowserView.defineRPC<MdviewRPC>({
 			closeFile: ({ path }) => {
 				removeFile(path);
 			},
+			ready: () => {
+				console.log("webview ready");
+				webviewReady = true;
+				const toOpen = pendingFiles.splice(0);
+				for (const file of toOpen) {
+					openFile(file);
+				}
+			},
 		},
 	},
 });
@@ -104,6 +121,10 @@ mainWindow.on("close", () => {
 const openFiles: Map<string, { filename: string }> = new Map();
 let currentFilePath: string | null = null;
 const watchedFiles: Set<string> = new Set();
+
+// Webview readiness tracking — queue file opens until the webview can receive RPC
+let webviewReady = false;
+const pendingFiles: string[] = [];
 
 function sendFileList() {
 	const files = Array.from(openFiles.entries()).map(([path, { filename }]) => ({
@@ -163,6 +184,15 @@ function openFile(filePath: string) {
 
 	if (!existsSync(absPath)) {
 		console.error(`File not found: ${absPath}`);
+		return;
+	}
+
+	// Queue if the webview hasn't signalled it's ready for RPC messages
+	if (!webviewReady) {
+		console.log(`Queuing file (webview not ready): ${absPath}`);
+		if (!pendingFiles.includes(absPath)) {
+			pendingFiles.push(absPath);
+		}
 		return;
 	}
 
@@ -441,13 +471,16 @@ const CLI_SCRIPT = [
 	'    esac',
 	'done',
 	'',
-	'SIGNAL_FILE="/tmp/mdview-open"',
+	'REQUEST_FILE="/tmp/mdview-open-request"',
 	'',
 	'if [ ${#files[@]} -eq 0 ]; then',
 	'    open -b com.ccheever.mdview',
 	'else',
-	'    # Write file paths to signal file for the running app to pick up',
-	'    printf "%s\\n" "${files[@]}" >> "$SIGNAL_FILE"',
+	'    # Write paths to a request file that the app polls (more reliable',
+	'    # than passing args through Apple Events which can be dropped)',
+	'    for f in "${files[@]}"; do',
+	'        echo "$f" >> "$REQUEST_FILE"',
+	'    done',
 	'    open -b com.ccheever.mdview',
 	'fi',
 	'',
@@ -618,19 +651,73 @@ Electrobun.events.on("open-file", (event) => {
 	openFile(filePath);
 });
 
-// Watch for file-open signals from the CLI tool or native Apple Event handler.
-// Uses a well-known path so the CLI script can write to it without knowing the PID.
-const signalFilePath = "/tmp/mdview-open";
-if (!existsSync(signalFilePath)) {
-	writeFileSync(signalFilePath, "");
-}
-watchFile(signalFilePath, { interval: 300 }, () => {
+// --- CLI request file ---
+// The CLI writes file paths here instead of passing them through Apple Events.
+// This is more reliable than the open(1) → kAEOpenDocuments → NSApplication
+// path, which can silently drop events.
+// Use /tmp (not tmpdir()) so the path matches the CLI's ${TMPDIR:-/tmp} regardless
+// of how the app was launched. macOS Launch Services may set a different $TMPDIR
+// than the user's shell.
+const cliRequestPath = "/tmp/mdview-open-request";
+
+function drainCliRequestFile() {
+	if (!existsSync(cliRequestPath)) return;
+
+	const processingPath = `${cliRequestPath}.${Date.now()}.processing`;
 	try {
-		const content = readFileSync(signalFilePath, "utf-8").trim();
-		if (!content) return;
-		writeFileSync(signalFilePath, "");
+		renameSync(cliRequestPath, processingPath);
+	} catch {
+		return; // Another poll already grabbed it
+	}
+
+	try {
+		const content = readFileSync(processingPath, "utf-8");
 		for (const line of content.split("\n")) {
 			const filePath = line.trim();
+			if (!filePath) continue;
+			console.log("cli request:", filePath);
+			const ext = extname(filePath).toLowerCase();
+			if (MD_EXTENSIONS.has(ext)) {
+				openFile(filePath);
+			}
+		}
+	} catch {
+		// Ignore read errors
+	} finally {
+		try { unlinkSync(processingPath); } catch {}
+	}
+}
+
+setInterval(drainCliRequestFile, 200);
+drainCliRequestFile();
+
+// --- Native open-file signal file (fallback for Finder / dock / Apple Events) ---
+// Electrobun's macOS Apple Event bridge can enqueue paths into a per-process
+// temp file before Bun is ready to handle them. Polling and atomically renaming
+// the file avoids the cold-start race without relying on mdview-specific IPC.
+const nativeOpenSignalPath = join(tmpdir(), `electrobun-open-file-${process.pid}`);
+
+function drainNativeOpenSignal() {
+	if (process.platform !== "darwin" || !existsSync(nativeOpenSignalPath)) {
+		return;
+	}
+
+	const processingPath = `${nativeOpenSignalPath}.${Date.now()}.processing`;
+
+	try {
+		renameSync(nativeOpenSignalPath, processingPath);
+	} catch {
+		return;
+	}
+
+	try {
+		const content = readFileSync(processingPath, "utf-8");
+		if (!content) {
+			return;
+		}
+
+		for (const line of content.split("\n")) {
+			const filePath = line.endsWith("\r") ? line.slice(0, -1) : line;
 			if (!filePath) continue;
 			console.log("open-file signal:", filePath);
 			const ext = extname(filePath).toLowerCase();
@@ -638,8 +725,21 @@ watchFile(signalFilePath, { interval: 300 }, () => {
 				openFile(filePath);
 			}
 		}
-	} catch {}
-});
-process.on("exit", () => { try { unlinkSync(signalFilePath); } catch {} });
+	} catch {
+		// Ignore malformed or disappearing signal files.
+	} finally {
+		try {
+			unlinkSync(processingPath);
+		} catch {}
+	}
+}
+
+if (process.platform === "darwin") {
+	setInterval(drainNativeOpenSignal, 250);
+	drainNativeOpenSignal();
+	process.on("exit", () => {
+		try { unlinkSync(nativeOpenSignalPath); } catch {}
+	});
+}
 
 console.log("mdview started");
